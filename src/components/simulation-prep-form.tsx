@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bot, Building2, Loader2, Play, ShieldCheck, Target } from "lucide-react";
+import { Bot, Building2, ChevronDown, ChevronRight, Loader2, Play, ShieldCheck, Target, Users } from "lucide-react";
 
 type ScenarioPrep = {
   id: string;
@@ -49,8 +49,12 @@ export function SimulationPrepForm({
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  
+  // Collapsible section states
+  const [defaultsExpanded, setDefaultsExpanded] = useState(true);
+  const [twinsExpanded, setTwinsExpanded] = useState(true);
 
-    // Build role options from team members and default roles
+  // Build role options from team members
   const roleOptions = useMemo(() => {
     const roles = new Set(teamMembers.map((member) => member.roleName));
     ["创始人", "CEO", "CTO", "CLO", "COO", "CFO", "CMO"].forEach((role) => roles.add(role));
@@ -249,49 +253,73 @@ export function SimulationPrepForm({
           <p className="text-xs text-[var(--muted)]">可以选择数字孪生或默认角色参与会议</p>
         </div>
 
-        {/* 默认角色选择 */}
+        {/* 默认角色选择 - 可折叠 */}
         <div className="mb-4">
-          <p className="mb-2 text-sm text-cyan-200 font-semibold">🎯 默认角色（预设）</p>
-          <div className="grid gap-3 grid-cols-2">
-            {defaultRoles.map((role) => (
-              <label key={role.id} className="cyber-option">
-                <input 
-                  className="mt-1 accent-cyan-300" 
-                  type="checkbox" 
-                  name={`default/${role.id}`}
-                />
-                <span>
-                  <span className="block font-semibold text-white">
-                    {role.name}
-                  </span>
-                  <span className="text-xs text-cyan-300">
-                    默认角色 · 可直接调用
-                  </span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* 数字孪生选择 */}
-        {teamMembers.length > 0 && (
-          <div>
-            <p className="mb-2 text-sm text-fuchsia-200 font-semibold">🔮 数字孪生（已创建）</p>
+          <button
+            type="button"
+            onClick={() => setDefaultsExpanded(!defaultsExpanded)}
+            className="mb-2 flex w-full items-center justify-between text-sm text-cyan-200 font-semibold hover:text-cyan-100"
+          >
+            <span className="flex items-center gap-2">
+              <Bot size={16} />
+              🎯 默认角色（预设）· {defaultRoles.length} 个角色
+            </span>
+            {defaultsExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+          </button>
+          {defaultsExpanded && (
             <div className="grid gap-3 grid-cols-2">
-              {teamMembers.map((member) => (
-                <label key={member.id} className="cyber-option">
-                  <input className="mt-1 accent-cyan-300" type="checkbox" name={`twin:${member.id}`} />
+              {defaultRoles.map((role) => (
+                <label key={role.id} className="cyber-option">
+                  <input 
+                    className="mt-1 accent-cyan-300" 
+                    type="checkbox" 
+                    name={`default/${role.id}`}
+                  />
                   <span>
                     <span className="block font-semibold text-white">
-                      {member.name} / {member.roleName}
+                      {role.name}
                     </span>
-                    <span className="text-xs text-[var(--muted)]">
-                      {member.isRealMember ? "真实成员" : "虚拟角色"} · {member.distillationProfile ? "已蒸馏" : "未蒸馏"}
+                    <span className="text-xs text-cyan-300">
+                      默认角色 · 可直接调用
                     </span>
                   </span>
                 </label>
               ))}
             </div>
+          )}
+        </div>
+
+        {/* 数字孪生选择 - 可折叠 */}
+        {teamMembers.length > 0 && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setTwinsExpanded(!twinsExpanded)}
+              className="mb-2 flex w-full items-center justify-between text-sm text-fuchsia-200 font-semibold hover:text-fuchsia-100"
+            >
+              <span className="flex items-center gap-2">
+                <Users size={16} />
+                🔮 数字孪生（已创建）· {teamMembers.length} 个角色
+              </span>
+              {twinsExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+            </button>
+            {twinsExpanded && (
+              <div className="grid gap-3 grid-cols-2">
+                {teamMembers.map((member) => (
+                  <label key={member.id} className="cyber-option">
+                    <input className="mt-1 accent-cyan-300" type="checkbox" name={`twin:${member.id}`} />
+                    <span>
+                      <span className="block font-semibold text-white">
+                        {member.name} / {member.roleName}
+                      </span>
+                      <span className="text-xs text-[var(--muted)]">
+                        {member.isRealMember ? "真实成员" : "虚拟角色"} · {member.distillationProfile ? "已蒸馏" : "未蒸馏"}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -392,7 +420,7 @@ export function SimulationPrepForm({
           <textarea
             className="field mt-1 min-h-20"
             name="situation"
-            placeholder="补充本局的特殊背景、风险或机会。例如：投资人要求两周内看到付费转化；团队正在讨论是否降价进入新市场。"
+            placeholder="补充本局的特殊背景、风险或机会。例如：投资人要求两周内看到付费转化；团队正在讨论是降进入新市场。"
           />
         </FieldLabel>
       </section>
