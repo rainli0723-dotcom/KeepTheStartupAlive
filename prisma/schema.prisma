@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model OrganizationProfile {
+  id                  String   @id @default(cuid())
+  name                String
+  stage               String
+  industry            String
+  product             String
+  market              String
+  cashflow            Int      @default(60)
+  revenue             String   @default("尚未填写")
+  teamSize            Int      @default(1)
+  governanceStructure String   @default("创始人负责制")
+  keyRisks            String   @default("[]")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  workspaces SimulationWorkspace[]
+  documents  OrganizationDocument[]
+}
+
+model OrganizationDocument {
+  id                    String   @id @default(cuid())
+  organizationProfileId String
+  fileName              String
+  mimeType              String
+  extractedText         String
+  sourceKind            String
+  createdAt             DateTime @default(now())
+
+  organizationProfile   OrganizationProfile @relation(fields: [organizationProfileId], references: [id], onDelete: Cascade)
+}
+
+model SimulationWorkspace {
+  id                   String   @id @default(cuid())
+  name                 String
+  organizationStage    String
+  sandboxType          String
+  currentCycle         Int      @default(1)
+  status               String   @default("active")
+  organizationState    String
+  selectedRoleNames    String
+  userRole             String   @default("CEO")
+  selectedScenarioId   String?
+  organizationProfileId String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  organizationProfile OrganizationProfile @relation(fields: [organizationProfileId], references: [id], onDelete: Cascade)
+  teamMembers         TeamMember[]
+  events              BusinessEvent[]
+  meetings            StrategyMeeting[]
+  finales             SimulationFinale[]
+}
+
+model SimulationFinale {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  completedCycles Int
+  outcomeType    String
+  title          String
+  summary        String
+  score          Int
+  keyDrivers     String
+  decisionTrace  String
+  alternativeEndings String
+  nextActions    String
+  rawReport      String
+  createdAt      DateTime @default(now())
+
+  workspace      SimulationWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model RoleTemplate {
+  id                 String   @id @default(cuid())
+  name               String   @unique
+  category           String
+  stages             String
+  sandboxTypes       String
+  defaultCapabilities String
+  defaultMetrics     String
+  description        String
+  createdAt          DateTime @default(now())
+}
+
+model TeamMember {
+  id                   String   @id @default(cuid())
+  workspaceId           String
+  name                 String
+  roleName             String
+  isRealMember         Boolean  @default(false)
+  capabilities         String
+  customMetrics        String
+  personality          String
+  communicationStyle   String
+  decisionPreference   String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  workspace            SimulationWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceDocuments      SourceDocument[]
+  distillationProfile  DistillationProfile?
+}
+
+model SourceDocument {
+  id            String   @id @default(cuid())
+  teamMemberId  String
+  fileName      String
+  mimeType      String
+  extractedText String
+  sourceKind    String
+  createdAt     DateTime @default(now())
+
+  teamMember    TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+}
+
+model DistillationProfile {
+  id                 String   @id @default(cuid())
+  teamMemberId        String   @unique
+  languageStyle       String
+  decisionPreference  String
+  values              String
+  pressureResponse    String
+  capabilityTendency  String
+  typicalPhrases      String
+  professionalBoundary String
+  rawProfile          String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  teamMember          TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+}
+
+model Scenario {
+  id          String   @id @default(cuid())
+  name        String
+  sandboxType String
+  stage       String
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  nodes ScenarioNode[]
+}
+
+model ScenarioNode {
+  id          String @id @default(cuid())
+  scenarioId  String
+  nodeType    String
+  title       String
+  content     String
+  effect      String
+  sortOrder   Int
+
+  scenario    Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+}
+
+model BusinessEvent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  cycle       Int
+  eventType   String
+  title       String
+  description String
+  impact      String
+  createdAt   DateTime @default(now())
+
+  workspace   SimulationWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  meetings    StrategyMeeting[]
+}
+
+model StrategyMeeting {
+  id              String   @id @default(cuid())
+  workspaceId      String
+  businessEventId  String?
+  cycle           Int
+  chair           String
+  agenda          String
+  participantViews String
+  userInput       String
+  conclusion      String
+  createdAt       DateTime @default(now())
+
+  workspace       SimulationWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  businessEvent   BusinessEvent? @relation(fields: [businessEventId], references: [id], onDelete: SetNull)
+  decisionOptions DecisionOption[]
+}
+
+model DecisionOption {
+  id              String @id @default(cuid())
+  meetingId       String
+  title           String
+  recommendation  String
+  upside          String
+  risk            String
+  resourceNeed    String
+  impactScore     String
+  nextIndicators  String
+
+  meeting         StrategyMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+}

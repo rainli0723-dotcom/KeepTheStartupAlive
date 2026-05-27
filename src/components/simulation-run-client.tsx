@@ -1,0 +1,451 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Check, Home, Loader2, Send, StopCircle } from "lucide-react";
+import type { MeetingInteractionLog } from "@/lib/simulation-run";
+
+type DecisionOptionView = {
+  id: string;
+  title: string;
+  recommendation: string;
+  upside: string;
+  risk: string;
+  resourceNeed: string;
+};
+
+type ParticipantView = {
+  roleName: string;
+  view: string;
+};
+
+type TeamMemberView = {
+  id: string;
+  name: string;
+  roleName: string;
+  isRealMember: boolean;
+};
+
+type MeetingView = {
+  id: string;
+  cycle: number;
+  chair: string;
+  agenda: string;
+  conclusion: string;
+  participantViews: ParticipantView[];
+  interactions: MeetingInteractionLog[];
+  businessEvent: {
+    title: string;
+    description: string;
+    eventType: string;
+  } | null;
+  decisionOptions: DecisionOptionView[];
+};
+
+type RunState = {
+  workspaceName: string;
+  organizationName: string;
+  userRole: string;
+  status: string;
+  completedCycles: number;
+  totalCycles: number;
+  lockedParticipants: string[];
+  teamMembers: TeamMemberView[];
+  selectedMemberIds: string[];
+  latestMeeting: MeetingView | null;
+};
+
+export function SimulationRunClient({ run }: { run: RunState }) {
+  const router = useRouter();
+  const [pending, setPending] = useState<"message" | "cycle" | "end" | null>(null);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [selectedOptionId, setSelectedOptionId] = useState("");
+  const [suggestedChoices, setSuggestedChoices] = useState<string[]>([]);
+  const [localInteractions, setLocalInteractions] = useState<MeetingInteractionLog[]>([]);
+  const [roundMemberIds, setRoundMemberIds] = useState<string[]>(
+    run.selectedMemberIds.length ? run.selectedMemberIds : run.teamMembers.map((member) => member.id),
+  );
+  const [showFinaleModal, setShowFinaleModal] = useState(false);
+  const [finaleData, setFinaleData] = useState<{ title: string; summary: string; score: number } | null>(null);
+
+  const meeting = run.latestMeeting;
+  const allInteractions = useMemo(
+    () => [...(meeting?.interactions ?? []), ...localInteractions],
+    [meeting?.interactions, localInteractions],
+  );
+  const isFinished = run.completedCycles >= run.totalCycles;
+
+  function toggleRoundMember(memberId: string) {
+    setRoundMemberIds((current) =>
+      current.includes(memberId) ? current.filter((id) => id !== memberId) : [...current, memberId],
+    );
+  }
+
+  async function submitMessage(nextMessage?: string, optionId = selectedOptionId) {
+    if (!meeting) return;
+    const content = (nextMessage ?? message).trim();
+    if (!content) {
+      setError("请输入会议发言，或选择一个系统建议行动。");
+      return;
+    }
+
+    setPending("message");
+    setError("");
+
+    const response = await fetch(`/api/meetings/${meeting.id}/interact`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: content, selectedOptionId: optionId || undefined }),
+    });
+    const body = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      setError(body.error ?? "LLM 实时讨论失败。");
+      setPending(null);
+      return;
+    }
+
+    setLocalInteractions((items) => [...items, body.interaction]);
+    setSuggestedChoices(body.suggestedChoices ?? []);
+    setMessage("");
+    if (optionId) setSelectedOptionId(optionId);
+    setPending(null);
+  }
+
+  async function nextCycle() {
+    if (roundMemberIds.length === 0) {
+      setError("请至少选择一个下一轮参会角色。");
+      return;
+    }
+
+    setPending("cycle");
+    setError("");
+    const recentInteraction = allInteractions.at(-1);
+    const response = await fetch("/api/cycles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        selectedMemberIds: roundMemberIds,
+        userInput: [
+          "继续本局 20 轮模拟，本轮参会角色由用户重新选择。",
+          recentInteraction ? `上一段用户互动：${recentInteraction.message}` : "",
+          recentInteraction?.evaluation ? `LLM 实时判断：${recentInteraction.evaluation}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      setError(body.error ?? "下一轮生成失败。");
+      setPending(null);
+      return;
+    }
+
+    router.refresh();
+    setLocalInteractions([]);
+    setSuggestedChoices([]);
+    setPending(null);
+  }
+
+  async function endRun() {
+    setPending("end");
+    setError("");
+    
+    // Simply navigate to dashboard - skip complex endpoint calls
+    router.push("/dashboard");
+    setPending(null);
+  }
+
+  async function fetchAndShowFinale() {
+    const res = await fetch("/api/finale");
+    const body = await res.json();
+    if (body.finale) {
+      setFinaleData({ title: body.finale.title, summary: body.finale.summary, score: body.finale.score });
+      setShowFinaleModal(true);
+    } else {
+      router.push("/dashboard");
+    }
+  }
+
+  useEffect(() => {
+    if (isFinished && !showFinaleModal) {
+      fetchAndShowFinale();
+    }
+  }, [isFinished]);
+
+  return (
+    <main className="min-h-screen bg-[#0c0f14] text-slate-100">
+      {/* 结局弹窗 */}
+      {showFinaleModal && finaleData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-2xl border border-cyan-300/30 bg-gradient-to-br from-[#111821] to-[#0c0f14] p-8 shadow-2xl shadow-cyan-500/10">
+            <div className="absolute -top-12 left-1/2 -translate-x-1/2 rounded-full border border-cyan-300/30 bg-cyan-300/20 px-6 py-3">
+              <span className="font-mono text-3xl font-bold text-white">{finaleData.score}</span>
+            </div>
+            <div className="mt-8 text-center">
+              <p className="text-xs uppercase tracking-[0.24em] text-cyan-200/80">KTSA 模拟结局</p>
+              <h2 className="mt-3 text-2xl font-bold text-white">{finaleData.title}</h2>
+              <p className="mt-4 text-sm leading-6 text-slate-300">{finaleData.summary}</p>
+            </div>
+            <div className="mt-8 flex justify-center gap-3">
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="rounded-md border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/20"
+              >
+                返回主页
+              </button>
+              <button
+                onClick={() => {
+                  fetch("/api/finale").then(async (res) => {
+                    const body = await res.json();
+                    if (body.finale?.id) router.push(`/finale/${body.finale.id}`);
+                  });
+                }}
+                className="rounded-md bg-[#3370ff] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#4e83ff]"
+              >
+                查看完整复盘
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="grid lg:grid-cols-[310px_1fr]">
+        <aside className="border-r border-white/10 bg-[#111821] lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto">
+          <div className="border-b border-white/10 p-4">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">
+              KTSA Meeting
+            </div>
+            <h1 className="text-lg font-semibold text-white">{run.workspaceName}</h1>
+            <p className="mt-1 text-xs leading-5 text-slate-400">
+              {run.organizationName} · {run.completedCycles}/{run.totalCycles} 轮
+            </p>
+          </div>
+
+          <div className="space-y-4 p-4">
+            <section>
+              <div className="mb-2 text-xs font-semibold text-slate-400">当前会议</div>
+              <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 p-3">
+                <div className="text-sm font-semibold text-white">Round {meeting?.cycle ?? "-"}</div>
+                <div className="mt-1 text-xs leading-5 text-slate-300">{meeting?.agenda ?? "尚未生成会议"}</div>
+              </div>
+            </section>
+
+            <section>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="text-xs font-semibold text-slate-400">下一轮参会角色</div>
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-slate-300">{roundMemberIds.length}</span>
+              </div>
+              <div className="space-y-2">
+                {run.teamMembers.map((member) => {
+                  const checked = roundMemberIds.includes(member.id);
+                  return (
+                    <button
+                      key={member.id}
+                      type="button"
+                      onClick={() => toggleRoundMember(member.id)}
+                      className={`flex w-full items-center gap-3 rounded-lg border p-2.5 text-left transition ${
+                        checked
+                          ? "border-cyan-300/35 bg-cyan-300/12"
+                          : "border-white/8 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      <Avatar label={member.roleName} active={checked} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-white">{member.name}</span>
+                        <span className="block truncate text-xs text-slate-400">
+                          {member.roleName} · {member.isRealMember ? "真实成员" : "虚拟角色"}
+                        </span>
+                      </span>
+                      {checked ? <Check size={15} className="text-cyan-200" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section>
+              <div className="mb-2 text-xs font-semibold text-slate-400">本轮决策方案</div>
+              {selectedOptionId && (
+                <div className="mb-2 rounded-md border border-fuchsia-300/30 bg-fuchsia-300/10 px-3 py-2 text-xs text-fuchsia-200 animate-pulse">
+                  ✓ 决策已锁定：{meeting?.decisionOptions.find(o => o.id === selectedOptionId)?.title}
+                </div>
+              )}
+              <div className="space-y-2">
+                {meeting?.decisionOptions.map((option) => (
+                  <label
+                    key={option.id}
+                    className={`block cursor-pointer rounded-lg border p-3 transition-all duration-200 ${
+                      selectedOptionId === option.id
+                        ? "border-fuchsia-300/60 bg-fuchsia-300/15 shadow-[0_0_12px_rgba(192,132,252,0.15)] scale-[1.02]"
+                        : "border-white/8 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
+                    }`}
+                  >
+                    <input
+                      className="sr-only"
+                      type="radio"
+                      name="decision"
+                      checked={selectedOptionId === option.id}
+                      onChange={() => setSelectedOptionId(option.id)}
+                    />
+                    <span className="block text-sm font-semibold text-white">{option.title}</span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-400">{option.recommendation}</span>
+                  </label>
+                ))}
+              </div>
+            </section>
+          </div>
+        </aside>
+
+        <section className="flex flex-col lg:sticky lg:top-0 lg:h-screen lg:overflow-hidden">
+          <header className="flex flex-col gap-3 border-b border-white/10 bg-[#151c26] px-5 py-4 md:flex-row md:items-center md:justify-between lg:shrink-0">
+            <div>
+              <div className="text-xs text-slate-400">当前身份：{run.userRole} · 主持：{meeting?.chair ?? "-"}</div>
+              <h2 className="mt-1 text-xl font-semibold text-white">{meeting?.businessEvent?.title ?? "本轮专项事件"}</h2>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={endRun}
+                disabled={pending === "end"}
+                className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/[0.08]"
+              >
+                {pending === "end" ? <Loader2 className="animate-spin" size={16} /> : <StopCircle size={16} />}
+                主动结束
+              </button>
+            </div>
+          </header>
+
+          {error ? <div className="mx-5 mt-4 rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">{error}</div> : null}
+
+          <div className="flex-1 overflow-y-auto px-5 py-5">
+            {!meeting ? (
+              <div className="rounded-lg border border-white/10 bg-white/[0.04] p-5">
+                <h2 className="text-lg font-semibold text-white">本局尚未生成会议</h2>
+                <p className="mt-2 text-sm text-slate-300">请回到准备页开始第 1 轮。</p>
+              </div>
+            ) : (
+              <div className="mx-auto max-w-4xl space-y-4">
+                <SystemCard title={meeting.businessEvent?.title ?? "本轮事件"} body={meeting.businessEvent?.description ?? ""} />
+                {meeting.participantViews.map((view, index) => (
+                  <ChatMessage key={`${view.roleName}-${index}`} speaker={view.roleName} message={view.view} />
+                ))}
+                <SystemCard title="阶段结论" body={meeting.conclusion} />
+                {allInteractions.map((item, index) => (
+                  <div key={`${item.createdAt}-${index}`} className="space-y-3">
+                    <ChatMessage speaker={item.speaker} message={item.message} mine />
+                    {item.dialogueTurns?.map((turn, turnIndex) => (
+                      <ChatMessage key={`${turn.speaker}-${turnIndex}`} speaker={turn.speaker} message={turn.message} />
+                    ))}
+                    {item.assistantReply ? <SystemCard title="会议主持归纳" body={item.assistantReply} /> : null}
+                    {item.evaluation ? (
+                      <div className="rounded-xl border border-emerald-300/40 bg-gradient-to-r from-emerald-300/15 to-cyan-300/10 px-5 py-4 shadow-[0_0_20px_rgba(16,185,229,0.1)]">
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200/80">📊 本轮决策影响评估</div>
+                        <p className="text-sm leading-6 text-emerald-50">{item.evaluation}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <footer className="border-t border-white/10 bg-[#151c26] px-5 py-4">
+            <div className="mx-auto max-w-4xl">
+              {suggestedChoices.length ? (
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {suggestedChoices.map((choice) => (
+                    <button
+                      key={choice}
+                      type="button"
+                      onClick={() => submitMessage(choice, "")}
+                      className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-300/16"
+                    >
+                      {choice}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <div className="rounded-xl border border-white/10 bg-[#0f141b] p-3 shadow-2xl shadow-black/20">
+                <textarea
+                  className="min-h-20 w-full resize-none bg-transparent px-1 py-1 text-sm leading-6 text-slate-100 outline-none placeholder:text-slate-500"
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                  placeholder="输入你的发言、追问或决策倾向"
+                />
+                <div className="mt-3 flex flex-col gap-2 border-t border-white/10 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-xs text-slate-400">下一轮将使用左侧勾选的 {roundMemberIds.length} 个角色。</div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => submitMessage()}
+                      disabled={pending === "message"}
+                      className="inline-flex items-center gap-2 rounded-md bg-[#3370ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4e83ff] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {pending === "message" ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
+                      发送
+                    </button>
+                    {isFinished ? (
+                      <Link href="/dashboard" className="inline-flex items-center justify-center rounded-md border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200">
+                        查看结算
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={nextCycle}
+                        disabled={pending === "cycle"}
+                        className="inline-flex items-center gap-2 rounded-md border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {pending === "cycle" ? <Loader2 className="animate-spin" size={16} /> : <ArrowRight size={16} />}
+                        下一轮
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </footer>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function Avatar({ label, active = false }: { label: string; active?: boolean }) {
+  return (
+    <span className={`grid size-9 shrink-0 place-items-center rounded-lg text-xs font-bold ${active ? "bg-[#3370ff] text-white" : "bg-white/10 text-slate-300"}`}>
+      {label.slice(0, 2).toUpperCase()}
+    </span>
+  );
+}
+
+function ChatMessage({ speaker, message, mine = false }: { speaker: string; message: string; mine?: boolean }) {
+  return (
+    <div className={`flex gap-3 ${mine ? "justify-end" : "justify-start"}`}>
+      {!mine ? <Avatar label={speaker} active /> : null}
+      <div className={`max-w-[78%] ${mine ? "items-end" : "items-start"} flex flex-col`}>
+        <div className="mb-1 text-xs text-slate-400">{speaker}</div>
+        <div className={`rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${mine ? "rounded-tr-sm bg-[#3370ff] text-white" : "rounded-tl-sm bg-[#1d2633] text-slate-100"}`}>
+          {message}
+        </div>
+      </div>
+      {mine ? <Avatar label={speaker} /> : null}
+    </div>
+  );
+}
+
+function SystemCard({ title, body, tone = "info" }: { title: string; body: string; tone?: "info" | "success" }) {
+  return (
+    <div className={`mx-auto max-w-3xl rounded-xl border px-4 py-3 text-sm leading-6 ${
+      tone === "success"
+        ? "border-emerald-300/20 bg-emerald-300/8 text-emerald-50"
+        : "border-white/10 bg-white/[0.045] text-slate-200"
+    }`}>
+      <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{title}</div>
+      <div>{body}</div>
+    </div>
+  );
+}
