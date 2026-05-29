@@ -21,8 +21,8 @@ export default async function SimulationConfigPage() {
   return (
     <AppShell>
       <div className="mb-4">
-        <Link href="/simulation/prepare" className="text-sm text-[var(--accent)] hover:underline">
-          ← 返回沙盘总览
+        <Link href="/simulation/start" className="text-sm text-[var(--accent)] hover:underline">
+          ← 返回开始模拟
         </Link>
       </div>
       <PageHeader

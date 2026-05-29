@@ -40,12 +40,12 @@ export async function callStructuredLlm<T>(input: {
   const requestBody = JSON.stringify({
     model,
     temperature: 0.4,
-    response_format: { type: "json_object" },
+    ...(baseUrl.includes("minimax") ? {} : { response_format: { type: "json_object" } }),
     messages: [
       {
         role: "system",
         content:
-          "You are KTSA, a To B business simulation sandbox analyst. Always return valid JSON only.",
+          "You are KTSA, a To B business simulation sandbox analyst. Your response MUST be a valid JSON object. Do not include any explanation, markdown formatting, or text outside the JSON. The JSON must exactly match the required schema.",
       },
       ...input.messages,
     ],
@@ -75,8 +75,22 @@ export async function callStructuredLlm<T>(input: {
   }
 
   const payload = await response.json();
-  const content = payload.choices?.[0]?.message?.content;
+  let content = payload.choices?.[0]?.message?.content;
+  
   if (!content) throw new Error("LLM returned an empty response.");
+  
+  // For MiniMax, try to extract JSON from the response if it contains markdown
+  if (baseUrl.includes("minimax") && typeof content === "string") {
+    // Try to find JSON in the response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        return input.schema.parse(JSON.parse(jsonMatch[0]));
+      } catch {
+        // If parsing fails, continue with original content
+      }
+    }
+  }
 
   return input.schema.parse(JSON.parse(content));
 }

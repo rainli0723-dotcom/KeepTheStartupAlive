@@ -162,6 +162,19 @@ export function SimulationPrepForm({
     // Get selected scenario ID
     const selectedScenarioIdValue = String(formData.get("selectedScenario") || "");
 
+    // Get organization fields
+    const orgData = {
+      name: String(formData.get("orgName") || organization.name),
+      stage: String(formData.get("orgStage") || organization.stage),
+      industry: String(formData.get("orgIndustry") || organization.industry),
+      product: String(formData.get("orgProduct") || organization.product),
+      market: String(formData.get("orgMarket") || organization.market),
+      revenue: String(formData.get("orgRevenue") || organization.revenue),
+      cashflow: Number(formData.get("orgCashflow")) || organization.cashflow,
+      teamSize: Number(formData.get("orgTeamSize")) || organization.teamSize,
+      governanceStructure: String(formData.get("orgGovernance") || organization.governanceStructure),
+    };
+
     // Use existing organization data, only update userRole, selected members, and scenario
     const workspaceResponse = await fetch("/api/workspace", {
       method: "PATCH",
@@ -172,6 +185,7 @@ export function SimulationPrepForm({
         startNewRun: true, 
         situation,
         selectedScenarioId: selectedScenarioIdValue || null,
+        organizationProfile: orgData,
       }),
     });
     if (!workspaceResponse.ok) {
@@ -222,7 +236,7 @@ export function SimulationPrepForm({
       return;
     }
 
-    router.push("/simulation/overview");
+    router.push("/simulation/run");
   }
 
   return (
@@ -243,179 +257,187 @@ export function SimulationPrepForm({
         </FieldLabel>
       </section>
 
+      {/* 默认角色选择 - 独立面板 */}
       <section className="glass-panel p-5">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <Bot className="text-fuchsia-200" size={19} />
-            <h2 className="text-lg font-semibold text-white">2. 选择本局参会角色</h2>
+        <div className="mb-4 flex items-center gap-2">
+          <Bot className="text-cyan-200" size={19} />
+          <h2 className="text-lg font-semibold text-white">🎯 默认角色（预设）</h2>
+          <RequiredBadge />
+        </div>
+        <p className="mb-3 text-xs text-[var(--muted)]">可直接调用的预设角色，点击展开选择</p>
+        
+        <button
+          type="button"
+          onClick={() => setDefaultsExpanded(!defaultsExpanded)}
+          className="mb-3 flex w-full items-center justify-between rounded-md border border-white/10 bg-white/5 p-3 hover:bg-white/10"
+        >
+          <span className="flex items-center gap-2 text-sm text-cyan-200 font-semibold">
+            <Bot size={16} />
+            {defaultRoles.length} 个预设角色
+          </span>
+          {defaultsExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+        </button>
+        
+        {defaultsExpanded && (
+          <div className="grid gap-3 grid-cols-2">
+            {defaultRoles.map((role) => (
+              <label key={role.id} className="cyber-option">
+                <input 
+                  className="mt-1 accent-cyan-300" 
+                  type="checkbox" 
+                  name={`default/${role.id}`}
+                />
+                <span>
+                  <span className="block font-semibold text-white">
+                    {role.name}
+                  </span>
+                  <span className="text-xs text-cyan-300">
+                    默认角色
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* 数字孪生选择 - 独立面板 */}
+      {teamMembers.length > 0 && (
+        <section className="glass-panel p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <Users className="text-fuchsia-200" size={19} />
+            <h2 className="text-lg font-semibold text-white">🔮 数字孪生（已创建）</h2>
             <RequiredBadge />
           </div>
-          <p className="text-xs text-[var(--muted)]">可以选择数字孪生或默认角色参与会议</p>
-        </div>
-
-        {/* 默认角色选择 - 可折叠 */}
-        <div className="mb-4">
+          <p className="mb-3 text-xs text-[var(--muted)]">你在团队页面创建的成员</p>
+          
           <button
             type="button"
-            onClick={() => setDefaultsExpanded(!defaultsExpanded)}
-            className="mb-2 flex w-full items-center justify-between text-sm text-cyan-200 font-semibold hover:text-cyan-100"
+            onClick={() => setTwinsExpanded(!twinsExpanded)}
+            className="mb-3 flex w-full items-center justify-between rounded-md border border-white/10 bg-white/5 p-3 hover:bg-white/10"
           >
-            <span className="flex items-center gap-2">
-              <Bot size={16} />
-              🎯 默认角色（预设）· {defaultRoles.length} 个角色
+            <span className="flex items-center gap-2 text-sm text-fuchsia-200 font-semibold">
+              <Users size={16} />
+              {teamMembers.length} 个数字孪生
             </span>
-            {defaultsExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+            {twinsExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
           </button>
-          {defaultsExpanded && (
+          
+          {twinsExpanded && (
             <div className="grid gap-3 grid-cols-2">
-              {defaultRoles.map((role) => (
-                <label key={role.id} className="cyber-option">
-                  <input 
-                    className="mt-1 accent-cyan-300" 
-                    type="checkbox" 
-                    name={`default/${role.id}`}
-                  />
+              {teamMembers.map((member) => (
+                <label key={member.id} className="cyber-option">
+                  <input className="mt-1 accent-cyan-300" type="checkbox" name={`twin:${member.id}`} />
                   <span>
                     <span className="block font-semibold text-white">
-                      {role.name}
+                      {member.name} / {member.roleName}
                     </span>
-                    <span className="text-xs text-cyan-300">
-                      默认角色 · 可直接调用
+                    <span className="text-xs text-[var(--muted)]">
+                      {member.isRealMember ? "真实成员" : "虚拟角色"}
                     </span>
                   </span>
                 </label>
               ))}
             </div>
           )}
-        </div>
-
-        {/* 数字孪生选择 - 可折叠 */}
-        {teamMembers.length > 0 && (
-          <div>
-            <button
-              type="button"
-              onClick={() => setTwinsExpanded(!twinsExpanded)}
-              className="mb-2 flex w-full items-center justify-between text-sm text-fuchsia-200 font-semibold hover:text-fuchsia-100"
-            >
-              <span className="flex items-center gap-2">
-                <Users size={16} />
-                🔮 数字孪生（已创建）· {teamMembers.length} 个角色
-              </span>
-              {twinsExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-            </button>
-            {twinsExpanded && (
-              <div className="grid gap-3 grid-cols-2">
-                {teamMembers.map((member) => (
-                  <label key={member.id} className="cyber-option">
-                    <input className="mt-1 accent-cyan-300" type="checkbox" name={`twin:${member.id}`} />
-                    <span>
-                      <span className="block font-semibold text-white">
-                        {member.name} / {member.roleName}
-                      </span>
-                      <span className="text-xs text-[var(--muted)]">
-                        {member.isRealMember ? "真实成员" : "虚拟角色"} · {member.distillationProfile ? "已蒸馏" : "未蒸馏"}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* Scenario Selection Section */}
-      {scenarios.length > 0 && (
-        <section className="glass-panel p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <Target className="text-emerald-200" size={19} />
-            <h2 className="text-lg font-semibold text-white">选择专项场景（可选）</h2>
-          </div>
-          <p className="mb-4 text-sm text-[var(--muted)]">
-            选用场景后，本轮模拟将会受到该场景设定的影响。留空则不使用专项场景。
-          </p>
-          <div className="space-y-2">
-            <label className="flex cursor-pointer items-center gap-3 rounded-md border border-white/10 bg-white/5 p-3 hover:bg-white/10">
-              <input 
-                type="radio" 
-                name="selectedScenario" 
-                value="" 
-                defaultChecked={!defaultScenarioId}
-                className="accent-cyan-300"
-              />
-              <span className="text-sm text-white">不使用专项场景</span>
-            </label>
-            {scenarios.map((scenario) => (
-              <label key={scenario.id} className="flex cursor-pointer items-start gap-3 rounded-md border border-white/10 bg-white/5 p-3 hover:bg-white/10">
-                <input 
-                  type="radio" 
-                  name="selectedScenario" 
-                  value={scenario.id}
-                  defaultChecked={defaultScenarioId === scenario.id}
-                  className="mt-1 accent-cyan-300"
-                />
-                <div>
-                  <span className="block font-semibold text-white">{scenario.name}</span>
-                  <span className="text-xs text-[var(--muted)]">
-                    {scenario.sandboxType} · {scenario.stage}
-                  </span>
-                  <p className="mt-1 text-xs text-[var(--muted)]">{scenario.description}</p>
-                </div>
-              </label>
-            ))}
-          </div>
         </section>
       )}
+
+
 
       <section className="glass-panel p-5">
         <div className="mb-4 flex items-center gap-2">
           <Building2 className="text-amber-200" size={19} />
           <h2 className="text-lg font-semibold text-white">当前组织信息</h2>
+          <span className="text-xs text-amber-200">(可修改)</span>
         </div>
         <div className="grid gap-3 md:grid-cols-3 text-sm">
           <div className="rounded-md border border-white/10 bg-white/5 p-3">
             <p className="text-xs text-[var(--muted)]">组织名称</p>
-            <p className="mt-1 font-semibold text-white">{organization.name}</p>
+            <input 
+              type="text" 
+              name="orgName" 
+              defaultValue={organization.name}
+              className="mt-1 w-full bg-transparent text-white font-semibold focus:outline-none focus:border-b focus:border-amber-300"
+            />
           </div>
           <div className="rounded-md border border-white/10 bg-white/5 p-3">
             <p className="text-xs text-[var(--muted)]">阶段</p>
-            <p className="mt-1 font-semibold text-white">{organization.stage}</p>
+            <select 
+              name="orgStage" 
+              defaultValue={organization.stage}
+              className="mt-1 w-full bg-transparent text-white font-semibold focus:outline-none focus:border-b focus:border-amber-300"
+            >
+              <option value="初创期" className="bg-gray-800">初创期</option>
+              <option value="成长期" className="bg-gray-800">成长期</option>
+              <option value="成熟期" className="bg-gray-800">成熟期</option>
+              <option value="转型期" className="bg-gray-800">转型期</option>
+            </select>
           </div>
           <div className="rounded-md border border-white/10 bg-white/5 p-3">
             <p className="text-xs text-[var(--muted)]">行业</p>
-            <p className="mt-1 font-semibold text-white">{organization.industry}</p>
+            <input 
+              type="text" 
+              name="orgIndustry" 
+              defaultValue={organization.industry}
+              className="mt-1 w-full bg-transparent text-white font-semibold focus:outline-none focus:border-b focus:border-amber-300"
+            />
           </div>
           <div className="rounded-md border border-white/10 bg-white/5 p-3">
             <p className="text-xs text-[var(--muted)]">产品/业务</p>
-            <p className="mt-1 font-semibold text-white">{organization.product}</p>
+            <input 
+              type="text" 
+              name="orgProduct" 
+              defaultValue={organization.product}
+              className="mt-1 w-full bg-transparent text-white font-semibold focus:outline-none focus:border-b focus:border-amber-300"
+            />
           </div>
           <div className="rounded-md border border-white/10 bg-white/5 p-3">
             <p className="text-xs text-[var(--muted)]">目标市场</p>
-            <p className="mt-1 font-semibold text-white">{organization.market}</p>
+            <input 
+              type="text" 
+              name="orgMarket" 
+              defaultValue={organization.market}
+              className="mt-1 w-full bg-transparent text-white font-semibold focus:outline-none focus:border-b focus:border-amber-300"
+            />
           </div>
           <div className="rounded-md border border-white/10 bg-white/5 p-3">
             <p className="text-xs text-[var(--muted)]">收入情况</p>
-            <p className="mt-1 font-semibold text-white">{organization.revenue}</p>
+            <input 
+              type="text" 
+              name="orgRevenue" 
+              defaultValue={organization.revenue}
+              className="mt-1 w-full bg-transparent text-white font-semibold focus:outline-none focus:border-b focus:border-amber-300"
+            />
           </div>
           <div className="rounded-md border border-white/10 bg-white/5 p-3">
             <p className="text-xs text-[var(--muted)]">现金流</p>
-            <p className="mt-1 font-semibold text-white">{organization.cashflow}%</p>
+            <input 
+              type="number" 
+              name="orgCashflow" 
+              defaultValue={organization.cashflow}
+              className="mt-1 w-full bg-transparent text-white font-semibold focus:outline-none focus:border-b focus:border-amber-300"
+            />
           </div>
           <div className="rounded-md border border-white/10 bg-white/5 p-3">
             <p className="text-xs text-[var(--muted)]">团队规模</p>
-            <p className="mt-1 font-semibold text-white">{organization.teamSize} 人</p>
+            <input 
+              type="number" 
+              name="orgTeamSize" 
+              defaultValue={organization.teamSize}
+              className="mt-1 w-full bg-transparent text-white font-semibold focus:outline-none focus:border-b focus:border-amber-300"
+            />
           </div>
           <div className="rounded-md border border-white/10 bg-white/5 p-3">
             <p className="text-xs text-[var(--muted)]">治理结构</p>
-            <p className="mt-1 font-semibold text-white">{organization.governanceStructure}</p>
+            <input 
+              type="text" 
+              name="orgGovernance" 
+              defaultValue={organization.governanceStructure}
+              className="mt-1 w-full bg-transparent text-white font-semibold focus:outline-none focus:border-b focus:border-amber-300"
+            />
           </div>
         </div>
-        {organization.keyRisks && (
-          <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-300/10 p-3">
-            <p className="text-xs text-amber-200">关键风险</p>
-            <p className="mt-1 text-sm text-amber-100">{formatRisks(organization.keyRisks)}</p>
-          </div>
-        )}
         <FieldLabel label="本局补充情况" className="mt-3 block">
           <textarea
             className="field mt-1 min-h-20"

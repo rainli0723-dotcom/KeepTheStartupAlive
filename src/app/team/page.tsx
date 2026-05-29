@@ -3,7 +3,7 @@ import { Cpu, DatabaseZap, Radar, ScanFace, UploadCloud } from "lucide-react";
 import { AppShell, EmptyState } from "@/components/app-shell";
 import { TeamMemberCardActions } from "@/components/team-member-card-actions";
 import { TeamMemberForm } from "@/components/team-member-form";
-import { getActiveWorkspace } from "@/lib/workspace";
+import { getActiveWorkspaceForTeam } from "@/lib/workspace";
 import { parseCapabilities, parseMetrics } from "@/lib/serializers";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ const capabilityLabels = {
 };
 
 export default async function TeamPage() {
-  const workspace = await getActiveWorkspace();
+  const workspace = await getActiveWorkspaceForTeam();
   if (!workspace) {
     return (
       <AppShell>
@@ -56,15 +56,42 @@ export default async function TeamPage() {
 
         <div className="grid gap-5 p-5 sm:p-7">
           <section className="twin-panel p-5">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="grid size-10 place-items-center rounded-md border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
-                <ScanFace size={19} />
+            {/* Header row: icon + title | action links */}
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="grid size-10 place-items-center bg-gradient-to-br from-cyan-400/20 to-cyan-300/5 ring-1 ring-cyan-300/30 text-cyan-100" style={{ clipPath: "polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))" }}>
+                  <ScanFace size={19} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200/80">Create Node</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">新增数字孪生角色</h2>
+                </div>
               </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-cyan-200/80">Create Node</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">新增数字孪生角色</h2>
-              </div>
+              {workspace.teamMembers.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="hidden text-xs tracking-wide text-slate-400 sm:inline">为已有成员补充资料：</span>
+                  <Link
+                    className="twin-secondary-button inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold"
+                    href={`/team/${workspace.teamMembers[0].id}/distill`}
+                  >
+                    <UploadCloud size={16} />
+                    资料蒸馏
+                  </Link>
+                  <Link
+                    className="glass-primary-button inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold"
+                    href={`/team/${workspace.teamMembers[0].id}/distill#skill-import`}
+                  >
+                    <DatabaseZap size={16} />
+                    通过 Skill 导入
+                  </Link>
+                </div>
+              )}
             </div>
+
+            {/* Divider */}
+            <div className="mb-5 border-t border-cyan-300/15" />
+
+            {/* Form */}
             <TeamMemberForm horizontal={true} />
           </section>
 

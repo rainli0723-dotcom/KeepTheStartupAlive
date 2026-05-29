@@ -22,9 +22,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const meeting = await db.strategyMeeting.findUnique({
     where: { id },
     include: {
-      workspace: { include: { organizationProfile: true, teamMembers: true } },
-      businessEvent: true,
-      decisionOptions: true,
+      workspace: {
+        select: {
+          userRole: true,
+          organizationProfile: {
+            select: { name: true, stage: true, industry: true, product: true },
+          },
+        },
+      },
+      businessEvent: { select: { title: true, description: true, eventType: true } },
+      decisionOptions: { select: { id: true, title: true, recommendation: true, upside: true, risk: true } },
     },
   });
 
@@ -34,14 +41,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     ? meeting.decisionOptions.find((option) => option.id === input.selectedOptionId)
     : null;
   const participantViews = parseJson<ParticipantView[]>(meeting.participantViews, []);
-  const previousInteractions = parseInteractionLog(meeting.userInput);
-  const participantNames = [
-    ...new Set([
-      meeting.chair,
-      ...participantViews.map((view) => view.roleName),
-      ...meeting.workspace.teamMembers.map((member) => member.roleName),
-    ]),
-  ].filter(Boolean);
+  const allInteractions = parseInteractionLog(meeting.userInput);
+  // Only keep last 2 interactions to reduce token usage
+  const recentInteractions = allInteractions.slice(-2);
 
   let result: z.infer<typeof meetingInteractionSchema>;
   try {
@@ -51,61 +53,38 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         {
           role: "user",
           content: JSON.stringify({
-            task: "继续一场企业经营会议。用户刚刚发言或选择了一个方案。请让参会角色像真实会议一样轮流回应，而不是只总结观点。",
-            organization: meeting.workspace.organizationProfile,
-            workspace: {
-              cycle: meeting.cycle,
-              totalCycles: 20,
-              userRole: meeting.workspace.userRole,
-              status: meeting.workspace.status,
-            },
+            task: "继续企业会议。用户发言了，让角色回应。",
+            org: `${meeting.workspace.organizationProfile.name}（${meeting.workspace.organizationProfile.stage}·${meeting.workspace.organizationProfile.industry}）`,
             event: meeting.businessEvent
-              ? {
-                  title: meeting.businessEvent.title,
-                  description: meeting.businessEvent.description,
-                  eventType: meeting.businessEvent.eventType,
-                }
-              : null,
-            meeting: {
-              chair: meeting.chair,
-              agenda: meeting.agenda,
-              participantViews,
-              conclusion: meeting.conclusion,
-              availableSpeakers: participantNames,
-            },
+              ? `${meeting.businessEvent.title}：${meeting.businessEvent.description.slice(0, 200)}`
+              : "",
+            agenda: meeting.agenda.slice(0, 300),
+            conclusion: meeting.conclusion.slice(0, 300),
+            speakers: participantViews.map((v) => v.roleName),
+            userRole: meeting.workspace.userRole,
+            userMessage: input.message.slice(0, 500),
             selectedOption: selectedOption
-              ? {
-                  title: selectedOption.title,
-                  recommendation: selectedOption.recommendation,
-                  upside: selectedOption.upside,
-                  risk: selectedOption.risk,
-                  resourceNeed: selectedOption.resourceNeed,
-                }
-              : null,
-            userMessage: input.message,
-            previousInteractions,
+              ? `${selectedOption.title}：${selectedOption.recommendation.slice(0, 200)}`
+              : "",
+            recentInteractions: recentInteractions.map((i) => ({
+              speaker: i.speaker,
+              message: i.message.slice(0, 200),
+            })),
             outputContract: {
               dialogueTurns: [
-                {
-                  speaker: "must be one available speaker, such as CEO/CTO/CLO/CFO",
-                  message: "one concrete meeting reply, question, objection, or follow-up",
-                },
+                { speaker: "角色名", message: "简短回应" },
               ],
-              assistantReply: "short chair summary after the role-by-role discussion",
-              evaluation: "plain string judging the user's message and likely business impact",
-              riskSignal: "plain string describing the most important risk signal",
-              decisionQualityScore: "number from 0 to 100",
-              suggestedChoices: ["2-4 next actions the user can choose"],
+              assistantReply: "主持人总结",
+              evaluation: "用户发言的商业影响评估",
+              riskSignal: "最重要的风险信号",
+              decisionQualityScore: 50,
+              suggestedChoices: ["2-4个下一步行动"],
             },
             requirements: [
-              "Use Chinese.",
-              "Do not use game wording.",
-              "Return JSON object only.",
-              "dialogueTurns must contain 3-6 turns.",
-              "Each turn must be a direct reply in a live meeting, not a final summary.",
-              "At least two roles must disagree, ask a question, or challenge an assumption.",
-              "The chair can summarize only in assistantReply, after the role discussion.",
-              "suggestedChoices should be short user actions, not reports.",
+              "用中文。不要游戏化表达。只返回JSON。",
+              "dialogueTurns生成2-3个回合。每个是会议中的直接回应。",
+              "至少一个角色表达不同意见或提出问题。",
+              "assistantReply在dialogueTurns之后做简短总结。",
             ],
           }),
         },
@@ -119,12 +98,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const dialogueTurns =
     result.dialogueTurns.length > 0
       ? result.dialogueTurns
-      : [{ speaker: meeting.chair || "会议主持", message: result.assistantReply || "请继续补充你的判断。" }];
+      : [{ speaker: meeting.workspace.userRole || "会议主持", message: result.assistantReply || "请继续补充你的判断。" }];
   const evaluation = result.evaluation || "本次发言已记录，后续轮次会把它作为决策依据。";
 
   const entry = {
     speaker: meeting.workspace.userRole || "用户",
-    message: selectedOption ? `选择方案：${selectedOption.title}\n${input.message}` : input.message,
+    message: selectedOption ? `选择方案：${selectedOption.title}\n${input.message.slice(0, 500)}` : input.message.slice(0, 500),
     evaluation,
     assistantReply: result.assistantReply,
     suggestedChoices: result.suggestedChoices,

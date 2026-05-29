@@ -144,6 +144,26 @@ export async function POST() {
   `;
 
   const row = await getExistingFinale(workspace.id);
+  
+  // Also create an archive entry for the organization
+  const orgProfile = workspace.organizationProfile;
+  if (orgProfile) {
+    const db = getDb();
+    const archiveId = randomUUID();
+    await db.$executeRaw`
+      INSERT INTO OrganizationArchive (
+        id, organizationProfileId, name, stage, industry, product, market,
+        cashflow, revenue, teamSize, governanceStructure, keyRisks, finalOutcome, finalScore, simulationEndedAt
+      )
+      VALUES (
+        ${archiveId}, ${orgProfile.id}, ${orgProfile.name}, ${orgProfile.stage}, ${orgProfile.industry},
+        ${orgProfile.product}, ${orgProfile.market}, ${orgProfile.cashflow}, ${orgProfile.revenue},
+        ${orgProfile.teamSize}, ${orgProfile.governanceStructure}, ${orgProfile.keyRisks},
+        ${report.outcomeType}, ${Math.round(report.score)}, CURRENT_TIMESTAMP
+      )
+    `;
+  }
+  
   return NextResponse.json({ finale: row ? serializeFinale(row) : { id, ...report, completedCycles }, reused: false });
 }
 

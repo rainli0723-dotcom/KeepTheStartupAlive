@@ -171,7 +171,27 @@ export async function getActiveWorkspaceForOverview() {
   };
 }
 
-// Full version for pages that need complete data
+// Lightweight version for team page (only needs team members + profiles)
+export async function getActiveWorkspaceForTeam() {
+  await ensureDatabase();
+  const db = getDb();
+  return db.simulationWorkspace.findFirst({
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      teamMembers: {
+        include: {
+          distillationProfile: true,
+          sourceDocuments: { orderBy: { createdAt: "desc" }, take: 3 },
+        },
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+}
+
+// Full version for pages that need complete data (simulation, cycles API)
 export async function getActiveWorkspace() {
   await ensureDatabase();
   const db = getDb();

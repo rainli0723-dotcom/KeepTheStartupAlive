@@ -9,11 +9,12 @@ import {
   GitBranch,
   LayoutDashboard,
   LibraryBig,
+  PlayCircle,
   UsersRound,
 } from "lucide-react";
 
 const navItems = [
-  { href: "/dashboard", label: "沙盘总览", icon: LayoutDashboard },
+  { href: "/simulation/start", label: "开始模拟", icon: PlayCircle },
   { href: "/organization", label: "组织档案", icon: BriefcaseBusiness },
   { href: "/roles", label: "角色库", icon: LibraryBig },
   { href: "/team", label: "数字孪生", icon: UsersRound },

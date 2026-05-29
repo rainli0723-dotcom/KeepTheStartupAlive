@@ -24,6 +24,27 @@ model OrganizationProfile {
 
   workspaces SimulationWorkspace[]
   documents  OrganizationDocument[]
+  archives  OrganizationArchive[]
+}
+
+model OrganizationArchive {
+  id                  String   @id @default(cuid())
+  name                String
+  stage               String
+  industry            String
+  product             String
+  market              String
+  cashflow            Int
+  revenue             String
+  teamSize            Int
+  governanceStructure String
+  keyRisks            String
+  organizationProfileId String
+  simulationEndedAt  DateTime @default(now())
+  finalOutcome       String?
+  finalScore        Int?
+  
+  organizationProfile OrganizationProfile @relation(fields: [organizationProfileId], references: [id], onDelete: Cascade)
 }
 
 model OrganizationDocument {

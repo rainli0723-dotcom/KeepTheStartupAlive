@@ -1,10 +1,27 @@
+"use client";
+
 import {
   Archive,
   ChartSpline,
 } from "lucide-react";
 import { SidebarNav } from "./sidebar-nav";
+import { usePathname } from "next/navigation";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isHomePage = pathname === "/";
+  
+  // 首页不显示侧边栏
+  if (isHomePage) {
+    return (
+      <div className="app-canvas min-h-screen text-[var(--foreground)]">
+        <main>
+          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+        </main>
+      </div>
+    );
+  }
+  
   return (
     <div className="app-canvas min-h-screen text-[var(--foreground)]">
       <aside className="glass-sidebar fixed inset-y-0 left-0 hidden w-72 lg:block">

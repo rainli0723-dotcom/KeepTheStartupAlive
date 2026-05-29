@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppShell, EmptyState, PageHeader, Panel } from "@/components/app-shell";
 import { OrganizationDocumentForm } from "@/components/organization-document-form";
 import { OrganizationForm } from "@/components/organization-form";
+import { ArchiveList } from "@/components/archive-list";
 import { getActiveWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -74,6 +75,12 @@ export default async function OrganizationPage() {
             </div>
           </Panel>
         </div>
+      </div>
+
+      {/* 历史存档 */}
+      <div className="mt-8">
+        <h2 className="mb-4 text-lg font-semibold text-white">📜 历史存档</h2>
+        <ArchiveList organizationProfileId={workspace.organizationProfileId} />
       </div>
     </AppShell>
   );

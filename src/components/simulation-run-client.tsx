@@ -69,6 +69,7 @@ export function SimulationRunClient({ run }: { run: RunState }) {
   );
   const [showFinaleModal, setShowFinaleModal] = useState(false);
   const [finaleData, setFinaleData] = useState<{ title: string; summary: string; score: number } | null>(null);
+  const [decisionLocked, setDecisionLocked] = useState(false);
 
   const meeting = run.latestMeeting;
   const allInteractions = useMemo(
@@ -110,7 +111,10 @@ export function SimulationRunClient({ run }: { run: RunState }) {
     setLocalInteractions((items) => [...items, body.interaction]);
     setSuggestedChoices(body.suggestedChoices ?? []);
     setMessage("");
-    if (optionId) setSelectedOptionId(optionId);
+    if (optionId) {
+      setSelectedOptionId(optionId);
+      setDecisionLocked(true);
+    }
     setPending(null);
   }
 
@@ -148,6 +152,8 @@ export function SimulationRunClient({ run }: { run: RunState }) {
     router.refresh();
     setLocalInteractions([]);
     setSuggestedChoices([]);
+    setDecisionLocked(false);
+    setSelectedOptionId("");
     setPending(null);
   }
 
@@ -155,9 +161,20 @@ export function SimulationRunClient({ run }: { run: RunState }) {
     setPending("end");
     setError("");
     
-    // Simply navigate to dashboard - skip complex endpoint calls
-    router.push("/dashboard");
-    setPending(null);
+    // End workspace
+    await fetch("/api/workspace", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "ended" }),
+    });
+    
+    // Generate finale report
+    await fetch("/api/finale", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }).catch(() => {});
+    
+    setShowFinaleModal(true);
   }
 
   async function fetchAndShowFinale() {
@@ -167,7 +184,7 @@ export function SimulationRunClient({ run }: { run: RunState }) {
       setFinaleData({ title: body.finale.title, summary: body.finale.summary, score: body.finale.score });
       setShowFinaleModal(true);
     } else {
-      router.push("/dashboard");
+      router.push("/");
     }
   }
 
@@ -193,7 +210,7 @@ export function SimulationRunClient({ run }: { run: RunState }) {
             </div>
             <div className="mt-8 flex justify-center gap-3">
               <button
-                onClick={() => router.push("/dashboard")}
+                onClick={() => router.push("/")}
                 className="rounded-md border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/20"
               >
                 返回主页
@@ -268,19 +285,42 @@ export function SimulationRunClient({ run }: { run: RunState }) {
             </section>
 
             <section>
-              <div className="mb-2 text-xs font-semibold text-slate-400">本轮决策方案</div>
-              {selectedOptionId && (
-                <div className="mb-2 rounded-md border border-fuchsia-300/30 bg-fuchsia-300/10 px-3 py-2 text-xs text-fuchsia-200 animate-pulse">
-                  ✓ 决策已锁定：{meeting?.decisionOptions.find(o => o.id === selectedOptionId)?.title}
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-400">本轮决策方案</span>
+                {decisionLocked && (
+                  <span className="rounded-full border border-amber-300/40 bg-amber-300/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">已锁定</span>
+                )}
+              </div>
+              {selectedOptionId && !decisionLocked && (
+                <div className="mb-2 flex items-center justify-between rounded-md border border-fuchsia-300/30 bg-fuchsia-300/10 px-3 py-2">
+                  <span className="text-xs text-fuchsia-200">✓ 已选决策：{meeting?.decisionOptions.find(o => o.id === selectedOptionId)?.title}</span>
+                  <button 
+                    type="button"
+                    onClick={() => setSelectedOptionId("")}
+                    className="text-xs text-slate-400 hover:text-white"
+                  >
+                    取消选择
+                  </button>
+                </div>
+              )}
+              {decisionLocked && selectedOptionId && (
+                <div className="mb-2 flex items-center rounded-md border border-fuchsia-300/50 bg-fuchsia-300/15 px-3 py-2">
+                  <span className="text-xs text-fuchsia-200">🔒 已锁定决策：{meeting?.decisionOptions.find(o => o.id === selectedOptionId)?.title}</span>
                 </div>
               )}
               <div className="space-y-2">
                 {meeting?.decisionOptions.map((option) => (
                   <label
                     key={option.id}
-                    className={`block cursor-pointer rounded-lg border p-3 transition-all duration-200 ${
-                      selectedOptionId === option.id
-                        ? "border-fuchsia-300/60 bg-fuchsia-300/15 shadow-[0_0_12px_rgba(192,132,252,0.15)] scale-[1.02]"
+                    className={`block rounded-lg border p-3 transition-all duration-200 ${
+                      decisionLocked
+                        ? "cursor-not-allowed opacity-60"
+                        : "cursor-pointer"
+                    } ${
+                      selectedOptionId === option.id && !decisionLocked
+                        ? "border-fuchsia-300/60 bg-fuchsia-300/15 shadow-[0_0_12px_rgba(192,132,252,0.15)]"
+                        : selectedOptionId === option.id && decisionLocked
+                        ? "border-fuchsia-300/60 bg-fuchsia-300/15"
                         : "border-white/8 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
                     }`}
                   >
@@ -288,11 +328,18 @@ export function SimulationRunClient({ run }: { run: RunState }) {
                       className="sr-only"
                       type="radio"
                       name="decision"
+                      disabled={decisionLocked}
                       checked={selectedOptionId === option.id}
                       onChange={() => setSelectedOptionId(option.id)}
                     />
                     <span className="block text-sm font-semibold text-white">{option.title}</span>
                     <span className="mt-1 block text-xs leading-5 text-slate-400">{option.recommendation}</span>
+                    {option.upside && (
+                      <div className="mt-2 text-xs text-emerald-300">↑ {option.upside}</div>
+                    )}
+                    {option.risk && (
+                      <div className="mt-1 text-xs text-amber-300">↓ {option.risk}</div>
+                    )}
                   </label>
                 ))}
               </div>
@@ -389,7 +436,7 @@ export function SimulationRunClient({ run }: { run: RunState }) {
                       发送
                     </button>
                     {isFinished ? (
-                      <Link href="/dashboard" className="inline-flex items-center justify-center rounded-md border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200">
+                      <Link href="/" className="inline-flex items-center justify-center rounded-md border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200">
                         查看结算
                       </Link>
                     ) : (
