@@ -28,7 +28,13 @@ export async function GET() {
   if (!workspace) return NextResponse.json({ finale: null });
 
   const row = await getExistingFinale(workspace.id);
-  return NextResponse.json({ finale: row ? serializeFinale(row) : null });
+  if (!row) return NextResponse.json({ finale: null });
+
+  const finale = serializeFinale(row);
+  return NextResponse.json({
+    finale,
+    enriched: !row.rawReport.includes('"generatedBy":"fallback"'),
+  });
 }
 
 export async function POST() {
@@ -36,14 +42,36 @@ export async function POST() {
   if (!workspace) return NextResponse.json({ error: "请先创建沙盘工作区" }, { status: 404 });
 
   const completedCycles = Math.max(0, workspace.currentCycle - 1);
-  // Allow generating finale at any point when user，主动结束
   const forceGenerate = Array.isArray(workspace.events) && workspace.events.length > 0;
   if (completedCycles < 1 && !forceGenerate) {
     return NextResponse.json({ error: "需要完成至少 1 轮后才能生成复盘报告" }, { status: 409 });
   }
 
   const existing = await getExistingFinale(workspace.id);
-  if (existing) return NextResponse.json({ finale: serializeFinale(existing), reused: true });
+  if (existing) {
+    const finale = serializeFinale(existing);
+    const enriched = !existing.rawReport.includes('"generatedBy":"fallback"');
+
+    // If the existing finale is just the fallback, trigger enrichment in background
+    if (!enriched) {
+      const meetings = await getDb().strategyMeeting.findMany({
+        where: { workspaceId: workspace.id },
+        orderBy: [{ cycle: "asc" }, { createdAt: "asc" }],
+        include: { businessEvent: true, decisionOptions: true },
+      });
+      enrichFinaleWithLlm(
+        existing.id,
+        workspace,
+        meetings,
+        parseState(workspace.organizationState),
+        Math.max(0, workspace.currentCycle - 1),
+      ).catch((err) => {
+        console.warn("[finale] background enrichment failed:", err instanceof Error ? err.message : String(err));
+      });
+    }
+
+    return NextResponse.json({ finale, enriched, reused: true });
+  }
 
   const db = getDb();
   const meetings = await db.strategyMeeting.findMany({
@@ -53,128 +81,152 @@ export async function POST() {
   });
 
   const state = parseState(workspace.organizationState);
-  const fallback = finaleSchema.parse(buildTwentyRoundFinale({
+
+  // Build and save INSTANT fallback first (pure math, ~0ms)
+  const fallbackInput = {
     state,
     completedCycles,
     events: meetings
-      .map((meeting) => meeting.businessEvent)
-      .filter((event): event is NonNullable<typeof event> => Boolean(event))
-      .map((event) => ({
-        eventType: event.eventType,
-        title: event.title,
-        description: event.description,
-        cycle: event.cycle,
-      })),
-    meetings: meetings.map((meeting) => ({ cycle: meeting.cycle, conclusion: meeting.conclusion })),
-  }));
-
-  let report: z.infer<typeof finaleSchema>;
-  try {
-    report = await callStructuredLlm({
-      schema: finaleSchema,
-      fallback,
-      messages: [
-        {
-          role: "user",
-          content: JSON.stringify({
-            task: "为 To B 商业模拟沙盘生成 20 轮后的最终结算。结局必须由此前事件、会议主题、用户输入和决策方案共同决定。",
-            organization: workspace.organizationProfile,
-            finalState: state,
-            completedCycles,
-            history: meetings.slice(0, 20).map((meeting) => ({
-              cycle: meeting.cycle,
-              event: meeting.businessEvent
-                ? {
-                    type: meeting.businessEvent.eventType,
-                    title: meeting.businessEvent.title,
-                    description: meeting.businessEvent.description,
-                    impact: meeting.businessEvent.impact,
-                  }
-                : null,
-              agenda: meeting.agenda,
-              userInput: meeting.userInput,
-              conclusion: meeting.conclusion,
-              decisions: meeting.decisionOptions.map((option) => ({
-                title: option.title,
-                recommendation: option.recommendation,
-                upside: option.upside,
-                risk: option.risk,
-                resourceNeed: option.resourceNeed,
-                impactScore: option.impactScore,
-                nextIndicators: option.nextIndicators,
-              })),
-            })),
-            outputContract: {
-              outcomeType:
-                "one of: bankruptcy, ipo, acquisition, stable_growth, restructure, shutdown, pivot, strategic_partnership, scale_up",
-              title: "string, for example 破产清算、上市准备、被战略并购、稳态续航、重组转向",
-              summary: "string",
-              score: "number 0-100",
-              keyDrivers: ["string"],
-              decisionTrace: ["string"],
-              alternativeEndings: ["string"],
-              nextActions: ["string"],
-            },
-            requirements: [
-              "只返回一个 JSON object，不要 Markdown",
-              "结局必须体现历史选择和会议主题的因果链",
-              "允许出现破产、上市、被并购、战略合作、重组、转型、关停、稳态续航等不同结局",
-              "decisionTrace 要指出哪些轮次的选择把组织推向该结局",
-              "alternativeEndings 要说明如果关键选择不同，可能出现哪些其他结局",
-              "语言面向企业复盘报告，不使用游戏化表达",
-            ],
-          }),
-        },
-      ],
-    });
-  } catch {
-    report = fallback;
-  }
+      .map((m) => m.businessEvent)
+      .filter((e): e is NonNullable<typeof e> => Boolean(e))
+      .map((e) => ({ eventType: e.eventType, title: e.title, description: e.description, cycle: e.cycle })),
+    meetings: meetings.map((m) => ({ cycle: m.cycle, conclusion: m.conclusion })),
+  };
+  const fallback = finaleSchema.parse(buildTwentyRoundFinale(fallbackInput));
+  const fallbackReport = { ...fallback, generatedBy: "fallback" as const };
 
   const id = randomUUID();
+  const orgProfile = workspace.organizationProfile;
+
   await db.$executeRaw`
     INSERT INTO SimulationFinale (
       id, workspaceId, completedCycles, outcomeType, title, summary, score,
       keyDrivers, decisionTrace, alternativeEndings, nextActions, rawReport, createdAt
     )
     VALUES (
-      ${id}, ${workspace.id}, ${completedCycles}, ${report.outcomeType}, ${report.title}, ${report.summary}, ${Math.round(report.score)},
-      ${toJson(report.keyDrivers)}, ${toJson(report.decisionTrace)}, ${toJson(report.alternativeEndings)}, ${toJson(report.nextActions)}, ${toJson(report)}, CURRENT_TIMESTAMP
+      ${id}, ${workspace.id}, ${completedCycles}, ${fallback.outcomeType}, ${fallback.title}, ${fallback.summary}, ${Math.round(fallback.score)},
+      ${toJson(fallback.keyDrivers)}, ${toJson(fallback.decisionTrace)}, ${toJson(fallback.alternativeEndings)}, ${toJson(fallback.nextActions)}, ${toJson(fallbackReport)}, CURRENT_TIMESTAMP
     )
   `;
 
-  const row = await getExistingFinale(workspace.id);
-  
-  // Also create an archive entry for the organization
-  const orgProfile = workspace.organizationProfile;
   if (orgProfile) {
-    const db = getDb();
-    const archiveId = randomUUID();
-    await db.$executeRaw`
-      INSERT INTO OrganizationArchive (
-        id, organizationProfileId, name, stage, industry, product, market,
-        cashflow, revenue, teamSize, governanceStructure, keyRisks, finalOutcome, finalScore, simulationEndedAt
-      )
-      VALUES (
-        ${archiveId}, ${orgProfile.id}, ${orgProfile.name}, ${orgProfile.stage}, ${orgProfile.industry},
-        ${orgProfile.product}, ${orgProfile.market}, ${orgProfile.cashflow}, ${orgProfile.revenue},
-        ${orgProfile.teamSize}, ${orgProfile.governanceStructure}, ${orgProfile.keyRisks},
-        ${report.outcomeType}, ${Math.round(report.score)}, CURRENT_TIMESTAMP
-      )
-    `;
+    try {
+      const archiveId = randomUUID();
+      await db.$executeRaw`
+        INSERT INTO OrganizationArchive (
+          id, organizationProfileId, name, stage, industry, product, market,
+          cashflow, revenue, teamSize, governanceStructure, keyRisks, finalOutcome, finalScore, simulationEndedAt
+        )
+        VALUES (
+          ${archiveId}, ${orgProfile.id}, ${orgProfile.name}, ${orgProfile.stage}, ${orgProfile.industry},
+          ${orgProfile.product}, ${orgProfile.market}, ${orgProfile.cashflow}, ${orgProfile.revenue},
+          ${orgProfile.teamSize}, ${orgProfile.governanceStructure}, ${orgProfile.keyRisks},
+          ${fallback.outcomeType}, ${Math.round(fallback.score)}, CURRENT_TIMESTAMP
+        )
+      `;
+    } catch (err) {
+      console.warn("[finale] Failed to archive organization:", err instanceof Error ? err.message : String(err));
+    }
   }
-  
-  return NextResponse.json({ finale: row ? serializeFinale(row) : { id, ...report, completedCycles }, reused: false });
+
+  // Fire-and-forget: enrich with LLM in background
+  enrichFinaleWithLlm(id, workspace, meetings, state, completedCycles).catch((err) => {
+    console.warn("[finale] background LLM enrichment failed:", err instanceof Error ? err.message : String(err));
+  });
+
+  return NextResponse.json({
+    finale: { id, ...fallback, completedCycles },
+    enriched: false,
+    reused: false,
+  });
 }
 
-async function getExistingFinale(workspaceId: string) {
-  const rows = await getDb().$queryRaw<FinaleRow[]>`
-    SELECT * FROM SimulationFinale
-    WHERE workspaceId = ${workspaceId}
-    ORDER BY createdAt DESC
-    LIMIT 1
-  `;
-  return rows[0] ?? null;
+async function enrichFinaleWithLlm(
+  finaleId: string,
+  workspace: Awaited<ReturnType<typeof getActiveWorkspace>>,
+  meetings: Awaited<ReturnType<typeof getDb>["strategyMeeting"]["findMany"]>,
+  state: Record<string, number>,
+  completedCycles: number,
+) {
+  if (!workspace) return;
+
+  try {
+    const enriched = await callStructuredLlm({
+      schema: finaleSchema,
+      timeoutMs: 180000,
+      messages: [
+        {
+          role: "user",
+          content: JSON.stringify({
+            task: "为商业模拟沙盘生成最终结算复盘报告。根据事件链和决策历史，判定组织结局。",
+            organization: {
+              name: workspace.organizationProfile.name,
+              stage: workspace.organizationProfile.stage,
+              industry: workspace.organizationProfile.industry,
+              product: workspace.organizationProfile.product,
+              market: workspace.organizationProfile.market,
+            },
+            finalMetrics: {
+              cashflow: state.cashflow,
+              growth: state.growth,
+              teamPressure: state.teamPressure,
+              technicalRisk: state.technicalRisk,
+              financingAttractiveness: state.financingAttractiveness,
+              survivalProbability: state.survivalProbability,
+            },
+            completedCycles,
+            timeline: (meetings ?? []).slice(0, 20).map((m) => {
+              const event = m.businessEvent;
+              return {
+                cycle: m.cycle,
+                event: event ? `${event.eventType}: ${event.title}` : null,
+                agenda: m.agenda?.slice(0, 200),
+                decision: m.conclusion?.slice(0, 300),
+                options: m.decisionOptions.map((o) => o.title),
+              };
+            }),
+            outputContract: {
+              outcomeType: "bankruptcy | ipo | acquisition | stable_growth | restructure | shutdown | pivot | strategic_partnership | scale_up",
+              title: "string - 结局标题",
+              summary: "string - 300字以内复盘摘要",
+              score: "number 0-100",
+              keyDrivers: ["string - 3-5个关键驱动因素"],
+              decisionTrace: ["string - 关键轮次选择"],
+              alternativeEndings: ["string - 2-3个其他可能结局"],
+              nextActions: ["string - 3-5个下一步行动建议"],
+            },
+            requirements: [
+              "只返回 JSON object，无 Markdown",
+              "结局必须体现事件链和决策的因果逻辑",
+              "decisionTrace 引用具体轮次和选择",
+              "语言面向企业复盘报告，务实专业",
+            ],
+          }),
+        },
+      ],
+    });
+
+    // Update the existing fallback record with LLM-enriched content
+    const enrichedReport = { ...enriched, generatedBy: "llm" as const };
+    const db = getDb();
+    await db.$executeRaw`
+      UPDATE SimulationFinale
+      SET
+        outcomeType = ${enriched.outcomeType},
+        title = ${enriched.title},
+        summary = ${enriched.summary},
+        score = ${Math.round(enriched.score)},
+        keyDrivers = ${toJson(enriched.keyDrivers)},
+        decisionTrace = ${toJson(enriched.decisionTrace)},
+        alternativeEndings = ${toJson(enriched.alternativeEndings)},
+        nextActions = ${toJson(enriched.nextActions)},
+        rawReport = ${toJson(enrichedReport)}
+      WHERE id = ${finaleId}
+    `;
+  } catch (err) {
+    // Silently fail - the fallback is already saved and visible to the user
+    console.warn("[finale] LLM enrichment failed, keeping fallback:", err instanceof Error ? err.message : String(err));
+  }
 }
 
 export async function PATCH(request: Request) {
@@ -203,6 +255,16 @@ export async function PATCH(request: Request) {
   }
 }
 
+async function getExistingFinale(workspaceId: string) {
+  const rows = await getDb().$queryRaw<FinaleRow[]>`
+    SELECT * FROM SimulationFinale
+    WHERE workspaceId = ${workspaceId}
+    ORDER BY createdAt DESC
+    LIMIT 1
+  `;
+  return rows[0] ?? null;
+}
+
 function serializeFinale(row: FinaleRow) {
   return {
     id: row.id,
@@ -216,7 +278,7 @@ function serializeFinale(row: FinaleRow) {
     decisionTrace: parseStringArray(row.decisionTrace),
     alternativeEndings: parseStringArray(row.alternativeEndings),
     nextActions: parseStringArray(row.nextActions),
-    rawReport: JSON.parse(row.rawReport) as FinaleReport,
+    rawReport: safeJsonParse(row.rawReport) as FinaleReport,
     createdAt: row.createdAt,
   };
 }
@@ -228,4 +290,8 @@ function parseStringArray(value: string) {
   } catch {
     return [];
   }
+}
+
+function safeJsonParse(value: string) {
+  try { return JSON.parse(value); } catch { return {}; }
 }

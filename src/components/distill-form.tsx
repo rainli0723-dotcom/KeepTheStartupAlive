@@ -13,14 +13,24 @@ export function DistillForm({ memberId }: { memberId: string }) {
     event.preventDefault();
     setPending(true);
     setMessage("");
+    const form = event.currentTarget;
     const response = await fetch(`/api/team/${memberId}/distill`, {
       method: "POST",
-      body: new FormData(event.currentTarget),
+      body: new FormData(form),
     });
     const body = await response.json().catch(() => ({}));
-    setMessage(response.ok ? "蒸馏画像已生成" : body.error ?? "蒸馏失败，请检查 LLM 配置");
     setPending(false);
-    router.refresh();
+
+    if (response.ok) {
+      setMessage("✅ 蒸馏画像已生成，数字孪生配置完成。");
+      if (form) form.reset();
+      router.refresh();
+    } else if (body.detail) {
+      // Partial success: document saved but distillation failed
+      setMessage(`⚠️ ${body.detail} ${body.hint || ""} (${body.error || ""})`);
+    } else {
+      setMessage(`❌ ${body.error || "蒸馏失败，请检查 LLM 配置"}`);
+    }
   }
 
   return (

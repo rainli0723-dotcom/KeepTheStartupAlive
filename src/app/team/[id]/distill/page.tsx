@@ -8,6 +8,16 @@ import { ensureDatabase } from "@/lib/bootstrap-db";
 
 export const dynamic = "force-dynamic";
 
+function parseTypicalPhrases(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.filter((item) => typeof item === "string" && item.trim());
+  } catch {
+    // value might be a raw string
+  }
+  return [];
+}
+
 export default async function DistillPage({ params }: { params: Promise<{ id: string }> }) {
   await ensureDatabase();
   const { id } = await params;
@@ -62,7 +72,18 @@ export default async function DistillPage({ params }: { params: Promise<{ id: st
                 <p><b className="text-white">决策偏好：</b>{member.distillationProfile.decisionPreference}</p>
                 <p><b className="text-white">价值观：</b>{member.distillationProfile.values}</p>
                 <p><b className="text-white">压力反应：</b>{member.distillationProfile.pressureResponse}</p>
+                <p><b className="text-white">能力倾向：</b>{member.distillationProfile.capabilityTendency}</p>
                 <p><b className="text-white">专业边界：</b>{member.distillationProfile.professionalBoundary}</p>
+                <div>
+                  <b className="text-white">典型用语：</b>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {parseTypicalPhrases(member.distillationProfile.typicalPhrases).map((phrase, idx) => (
+                      <span key={idx} className="rounded-full border border-[var(--line)] bg-white/[0.06] px-2.5 py-0.5 text-xs text-cyan-200">
+                        "{phrase}"
+                      </span>
+                    ))}
+                  </div>
+                </div>
               </div>
             ) : (
               <p className="text-sm text-[var(--muted)]">尚未生成蒸馏画像。</p>

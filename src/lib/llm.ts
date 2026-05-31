@@ -20,6 +20,7 @@ export async function callStructuredLlm<T>(input: {
   messages: LlmMessage[];
   schema: z.ZodType<T>;
   fallback?: T;
+  timeoutMs?: number;
 }) {
   input.messages.forEach((message) => llmMessageSchema.parse(message));
   const apiKey = process.env.LLM_API_KEY;
@@ -32,8 +33,9 @@ export async function callStructuredLlm<T>(input: {
   }
 
   const requestUrl = `${baseUrl.replace(/\/$/, "")}/chat/completions`;
+  const timeoutDuration = input.timeoutMs ?? llmTimeoutMs;
   const abortController = new AbortController();
-  const timeout = setTimeout(() => abortController.abort(), llmTimeoutMs);
+  const timeout = setTimeout(() => abortController.abort(), timeoutDuration);
 
   const forcedIpAgent = createForcedIpAgent(baseUrl);
   const dispatcher = forcedIpAgent ?? proxyAgent;
@@ -101,7 +103,7 @@ function formatNetworkError(error: unknown, requestUrl: string) {
   const causeText = [cause?.code, cause?.message].filter(Boolean).join(" ");
 
   if (message.includes("aborted") || cause?.code === "ABORT_ERR") {
-    return `LLM request timed out after ${llmTimeoutMs}ms: ${requestUrl}`;
+    return `LLM request timed out after ${timeoutDuration}ms: ${requestUrl}`;
   }
 
   return [
@@ -188,13 +190,25 @@ export const businessCycleSchema = z.object({
 });
 
 export const distillationSchema = z.object({
-  languageStyle: z.string(),
-  decisionPreference: z.string(),
-  values: z.string(),
-  pressureResponse: z.string(),
-  capabilityTendency: z.string(),
-  typicalPhrases: z.array(z.string()),
-  professionalBoundary: z.string(),
+  languageStyle: z.string().min(1, "语言风格不能为空"),
+  decisionPreference: z.string().min(1, "决策偏好不能为空"),
+  values: z.string().min(1, "价值观不能为空"),
+  pressureResponse: z.string().min(1, "压力反应不能为空"),
+  capabilityTendency: z.string().min(1, "能力倾向不能为空"),
+  typicalPhrases: z
+    .union([z.array(z.string()), z.string()])
+    .transform((val) => {
+      if (typeof val === "string") {
+        // LLM might return a comma-separated string instead of array
+        return val
+          .split(/[,;，；、\n]/)
+          .map((s) => s.trim().replace(/^[""「『]|[""」』]$/g, ""))
+          .filter((s) => s.length > 0);
+      }
+      return val.filter((s) => s.trim().length > 0);
+    })
+    .pipe(z.array(z.string().min(1)).min(1, "至少需要一个典型用语")),
+  professionalBoundary: z.string().min(1, "专业边界不能为空"),
 });
 
 const flexibleString = z
@@ -221,6 +235,20 @@ export const meetingInteractionSchema = z.object({
   riskSignal: flexibleString,
   decisionQualityScore: z.coerce.number().optional().default(50),
   suggestedChoices: z.array(z.string()).optional().default([]),
+});
+
+export const organizationAnalysisSchema = z.object({
+  name: z.string().optional().describe("公司/组织名称"),
+  stage: z.enum(["opc", "small_team", "seed", "growth", "mature", "incubator"]).optional().describe("组织发展阶段"),
+  industry: z.string().optional().describe("所属行业"),
+  product: z.string().optional().describe("核心产品/业务描述"),
+  market: z.string().optional().describe("目标市场"),
+  cashflow: z.number().min(0).max(100).optional().describe("现金流健康度 0-100"),
+  revenue: z.string().optional().describe("收入情况描述"),
+  teamSize: z.number().min(1).optional().describe("团队规模"),
+  governanceStructure: z.string().optional().describe("治理结构"),
+  keyRisks: z.array(z.string()).optional().describe("关键风险列表"),
+  summary: z.string().optional().describe("公司情况一句话总结"),
 });
 
 export const finaleSchema = z.object({

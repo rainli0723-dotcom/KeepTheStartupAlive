@@ -18,16 +18,17 @@ export function SkillImportForm({ memberId }: { memberId: string }) {
     setPending(true);
     setMessage("");
 
+    const form = event.currentTarget;
     const response = await fetch(`/api/team/${memberId}/skills`, {
       method: "POST",
-      body: new FormData(event.currentTarget),
+      body: new FormData(form),
     });
     const body = await response.json().catch(() => ({}));
 
     setMessage(response.ok ? "Skill 已导入，会作为该数字孪生的能力上下文参与会议推演。" : body.error ?? "Skill 导入失败");
     setPending(false);
     if (response.ok) {
-      event.currentTarget.reset();
+      if (form) form.reset();
       setSelectedPreset("");
       router.refresh();
     }

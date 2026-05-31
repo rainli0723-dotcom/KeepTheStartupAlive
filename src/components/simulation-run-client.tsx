@@ -160,21 +160,77 @@ export function SimulationRunClient({ run }: { run: RunState }) {
   async function endRun() {
     setPending("end");
     setError("");
-    
-    // End workspace
+
+    // End workspace first
     await fetch("/api/workspace", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "ended" }),
     });
-    
-    // Generate finale report
-    await fetch("/api/finale", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    }).catch(() => {});
-    
-    setShowFinaleModal(true);
+
+    // Generate finale: returns fallback INSTANTLY, LLM enriches in background
+    try {
+      const res = await fetch("/api/finale", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const body = await res.json();
+      if (body.finale) {
+        setFinaleData({
+          title: body.finale.title,
+          summary: body.finale.summary,
+          score: body.finale.score,
+        });
+        setShowFinaleModal(true);
+        setPending(null);
+
+        // If not yet enriched by LLM, poll for the improved version
+        if (!body.enriched) {
+          pollForEnrichedFinale(5, 2500); // poll up to 5 times, every 2.5s
+        }
+        return;
+      }
+    } catch {
+      // Fallback: try GET
+      try {
+        const res = await fetch("/api/finale");
+        const body = await res.json();
+        if (body.finale) {
+          setFinaleData({
+            title: body.finale.title,
+            summary: body.finale.summary,
+            score: body.finale.score,
+          });
+          setShowFinaleModal(true);
+          setPending(null);
+          return;
+        }
+      } catch {
+        setError("结局生成失败，请刷新页面重试。");
+      }
+    }
+
+    setPending(null);
+  }
+
+  async function pollForEnrichedFinale(remaining: number, delayMs: number) {
+    if (remaining <= 0) return;
+    await new Promise((r) => setTimeout(r, delayMs));
+    try {
+      const res = await fetch("/api/finale");
+      const body = await res.json();
+      if (body.enriched && body.finale) {
+        setFinaleData({
+          title: body.finale.title,
+          summary: body.finale.summary,
+          score: body.finale.score,
+        });
+      } else if (remaining > 1) {
+        pollForEnrichedFinale(remaining - 1, delayMs);
+      }
+    } catch {
+      if (remaining > 1) pollForEnrichedFinale(remaining - 1, delayMs);
+    }
   }
 
   async function fetchAndShowFinale() {
@@ -361,7 +417,7 @@ export function SimulationRunClient({ run }: { run: RunState }) {
                 className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/[0.08]"
               >
                 {pending === "end" ? <Loader2 className="animate-spin" size={16} /> : <StopCircle size={16} />}
-                主动结束
+                {pending === "end" ? "正在生成结局…" : "主动结束"}
               </button>
             </div>
           </header>
