@@ -20,7 +20,7 @@ export default function HomePage() {
 
       {/* Start Button */}
       <Link 
-        href="/simulation/config"
+        href="/simulation/start"
         className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-8 py-3 text-base font-semibold text-white transition-colors hover:bg-cyan-500"
       >
         <Play size={18} />

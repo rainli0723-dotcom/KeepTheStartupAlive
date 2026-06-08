@@ -108,7 +108,16 @@ export function SimulationRunClient({ run }: { run: RunState }) {
       return;
     }
 
-    setLocalInteractions((items) => [...items, body.interaction]);
+    const interaction = body.interaction;
+    const turns = interaction.dialogueTurns || [];
+    const evaluationText = interaction.evaluation || "";
+    const assistantText = interaction.assistantReply || "";
+
+    // Start with empty dialogue — turns will stream in one by one
+    interaction.dialogueTurns = [];
+    interaction.evaluation = "";
+    interaction.assistantReply = "";
+    setLocalInteractions((items) => [...items, interaction]);
     setSuggestedChoices(body.suggestedChoices ?? []);
     setMessage("");
     if (optionId) {
@@ -116,6 +125,29 @@ export function SimulationRunClient({ run }: { run: RunState }) {
       setDecisionLocked(true);
     }
     setPending(null);
+
+    // Stream each turn one at a time
+    for (let i = 0; i < turns.length; i++) {
+      await new Promise((r) => setTimeout(r, 800));
+      setLocalInteractions((items) => {
+        const updated = [...items];
+        const last = { ...updated[updated.length - 1] };
+        last.dialogueTurns = [...(last.dialogueTurns || []), turns[i]];
+        updated[updated.length - 1] = last;
+        return updated;
+      });
+    }
+
+    // Show evaluation after all turns
+    await new Promise((r) => setTimeout(r, 500));
+    setLocalInteractions((items) => {
+      const updated = [...items];
+      const last = { ...updated[updated.length - 1] };
+      last.assistantReply = assistantText;
+      last.evaluation = evaluationText;
+      updated[updated.length - 1] = last;
+      return updated;
+    });
   }
 
   async function nextCycle() {

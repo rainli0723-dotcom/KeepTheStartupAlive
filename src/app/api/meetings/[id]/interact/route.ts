@@ -53,7 +53,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         {
           role: "user",
           content: JSON.stringify({
-            task: "继续企业会议。用户发言了，让角色回应。",
+            task: "继续企业会议。用户刚刚发言了。请模拟真实的角色依次回应讨论，每个角色基于前一个角色的发言进行回应，而不是各自独立回复用户。",
             org: `${meeting.workspace.organizationProfile.name}（${meeting.workspace.organizationProfile.stage}·${meeting.workspace.organizationProfile.industry}）`,
             event: meeting.businessEvent
               ? `${meeting.businessEvent.title}：${meeting.businessEvent.description.slice(0, 200)}`
@@ -82,9 +82,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
             },
             requirements: [
               "用中文。不要游戏化表达。只返回JSON。",
-              "dialogueTurns生成2-3个回合。每个是会议中的直接回应。",
+              "dialogueTurns生成2-3个回合，按发言顺序排列。",
+              "每个回合必须是对话的一部分——基于前一个发言来回应，像真实会议一样逐步讨论。",
+              "角色之间要有互动：赞同、反对、追问、补充，而不是各说各话。",
               "至少一个角色表达不同意见或提出问题。",
-              "assistantReply在dialogueTurns之后做简短总结。",
+              "assistantReply在所有dialogueTurns之后做简短总结。",
             ],
           }),
         },
