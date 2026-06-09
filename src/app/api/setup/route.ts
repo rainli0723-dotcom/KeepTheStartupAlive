@@ -9,6 +9,7 @@ import {
 import { getDb } from "@/lib/db";
 import { toJson } from "@/lib/serializers";
 import { ensureRoleTemplates } from "@/lib/seed";
+import { assignWorkspaceToDefaultTenant, writeAuditLog } from "@/lib/tenant";
 
 const setupSchema = z.object({
   name: z.string().min(1),
@@ -71,6 +72,14 @@ export async function POST(request: Request) {
       },
     },
     include: { teamMembers: true, organizationProfile: true },
+  });
+  const tenant = await assignWorkspaceToDefaultTenant(workspace.id);
+  await writeAuditLog({
+    tenantId: tenant.id,
+    action: "workspace.created",
+    entityType: "SimulationWorkspace",
+    entityId: workspace.id,
+    metadata: { source: "setup", name: workspace.name, organization: organization.name },
   });
 
   return NextResponse.json({ workspace });

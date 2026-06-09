@@ -70,15 +70,55 @@ model SimulationWorkspace {
   selectedRoleNames    String
   userRole             String   @default("CEO")
   selectedScenarioId   String?
+  tenantId             String?
   organizationProfileId String
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
+  tenant              EnterpriseTenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   organizationProfile OrganizationProfile @relation(fields: [organizationProfileId], references: [id], onDelete: Cascade)
   teamMembers         TeamMember[]
   events              BusinessEvent[]
   meetings            StrategyMeeting[]
   finales             SimulationFinale[]
+}
+
+model EnterpriseTenant {
+  id          String   @id @default(cuid())
+  name        String
+  plan        String   @default("trial")
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspaces  SimulationWorkspace[]
+  members     TenantMember[]
+  auditLogs   AuditLog[]
+}
+
+model TenantMember {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  email     String?
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    EnterpriseTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  actor       String   @default("system")
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    String   @default("{}")
+  createdAt   DateTime @default(now())
+
+  tenant      EnterpriseTenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 }
 
 model SimulationFinale {

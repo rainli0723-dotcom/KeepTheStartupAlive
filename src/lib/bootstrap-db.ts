@@ -24,6 +24,41 @@ export async function ensureDatabase() {
     )
   `);
   await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS EnterpriseTenant (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      plan TEXT NOT NULL DEFAULT 'trial',
+      status TEXT NOT NULL DEFAULT 'active',
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt DATETIME NOT NULL
+    )
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS TenantMember (
+      id TEXT PRIMARY KEY NOT NULL,
+      tenantId TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT,
+      role TEXT NOT NULL DEFAULT 'admin',
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt DATETIME NOT NULL,
+      CONSTRAINT TenantMember_tenantId_fkey FOREIGN KEY (tenantId) REFERENCES EnterpriseTenant (id) ON DELETE CASCADE ON UPDATE CASCADE
+    )
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS AuditLog (
+      id TEXT PRIMARY KEY NOT NULL,
+      tenantId TEXT,
+      actor TEXT NOT NULL DEFAULT 'system',
+      action TEXT NOT NULL,
+      entityType TEXT NOT NULL,
+      entityId TEXT,
+      metadata TEXT NOT NULL DEFAULT '{}',
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT AuditLog_tenantId_fkey FOREIGN KEY (tenantId) REFERENCES EnterpriseTenant (id) ON DELETE SET NULL ON UPDATE CASCADE
+    )
+  `);
+  await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS SimulationWorkspace (
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
@@ -34,12 +69,15 @@ export async function ensureDatabase() {
       organizationState TEXT NOT NULL,
       selectedRoleNames TEXT NOT NULL,
       userRole TEXT NOT NULL DEFAULT 'CEO',
+      tenantId TEXT,
       organizationProfileId TEXT NOT NULL,
       createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt DATETIME NOT NULL,
+      CONSTRAINT SimulationWorkspace_tenantId_fkey FOREIGN KEY (tenantId) REFERENCES EnterpriseTenant (id) ON DELETE SET NULL ON UPDATE CASCADE,
       CONSTRAINT SimulationWorkspace_organizationProfileId_fkey FOREIGN KEY (organizationProfileId) REFERENCES OrganizationProfile (id) ON DELETE CASCADE ON UPDATE CASCADE
     )
   `);
+  await ensureColumn("SimulationWorkspace", "tenantId", "TEXT");
   await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS OrganizationDocument (
       id TEXT PRIMARY KEY NOT NULL,
@@ -196,4 +234,12 @@ export async function ensureDatabase() {
     )
   `);
   initialized = true;
+}
+
+async function ensureColumn(tableName: string, columnName: string, columnDefinition: string) {
+  const db = getDb();
+  const columns = await db.$queryRawUnsafe<{ name: string }[]>(`PRAGMA table_info(${tableName})`);
+  if (!columns.some((column) => column.name === columnName)) {
+    await db.$executeRawUnsafe(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
 }

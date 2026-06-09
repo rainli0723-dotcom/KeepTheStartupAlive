@@ -7,6 +7,7 @@ import {
   BriefcaseBusiness,
   FileText,
   GitBranch,
+  Building2,
   LibraryBig,
   PlayCircle,
   ShieldCheck,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 
 const navItems = [
+  { href: "/enterprise", label: "企业管理", icon: Building2 },
   { href: "/workspaces", label: "沙盘工作区", icon: SquareStack },
   { href: "/simulation/start", label: "开始模拟", icon: PlayCircle },
   { href: "/organization", label: "组织档案", icon: BriefcaseBusiness },

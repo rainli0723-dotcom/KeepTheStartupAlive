@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { ensureRoleTemplates, ensureScenarios } from "@/lib/seed";
 import { toJson } from "@/lib/serializers";
 import { serializeLockedMemberIds } from "@/lib/simulation-run";
+import { assignWorkspaceToDefaultTenant, writeAuditLog } from "@/lib/tenant";
 
 const demoRoleNames = ["创始人", "CEO", "CTO", "CFO", "产品负责人", "销售负责人", "法务顾问", "投资人"];
 
@@ -48,6 +49,7 @@ export async function POST() {
       organizationProfileId: organization.id,
     },
   });
+  const tenant = await assignWorkspaceToDefaultTenant(workspace.id);
 
   const roleDefinitions = demoRoleNames
     .map((name) => roleTemplates.find((roleTemplate) => roleTemplate.name === name))
@@ -180,6 +182,13 @@ export async function POST() {
         ],
       },
     },
+  });
+  await writeAuditLog({
+    tenantId: tenant.id,
+    action: "workspace.demo_created",
+    entityType: "SimulationWorkspace",
+    entityId: workspace.id,
+    metadata: { organization: organization.name, scenario: "董事会前经营推演 Demo" },
   });
 
   return NextResponse.json({ workspaceId: workspace.id, redirectTo: "/simulation/run" });
