@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { parseState, toJson } from "@/lib/serializers";
 import { getActiveWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
@@ -22,6 +22,10 @@ type FinaleRow = {
   rawReport: string;
   createdAt: string;
 };
+
+type FinaleMeeting = Prisma.StrategyMeetingGetPayload<{
+  include: { businessEvent: true; decisionOptions: true };
+}>;
 
 export async function GET() {
   const workspace = await getActiveWorkspace();
@@ -144,7 +148,7 @@ export async function POST() {
 async function enrichFinaleWithLlm(
   finaleId: string,
   workspace: Awaited<ReturnType<typeof getActiveWorkspace>>,
-  meetings: Awaited<ReturnType<typeof getDb>["strategyMeeting"]["findMany"]>,
+  meetings: FinaleMeeting[],
   state: Record<string, number>,
   completedCycles: number,
 ) {
@@ -250,7 +254,7 @@ export async function PATCH(request: Request) {
     await getDb().$executeRaw`UPDATE SimulationFinale SET ${setClause} WHERE id = ${id}`;
 
     return NextResponse.json({ success: true });
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "更新失败" }, { status: 500 });
   }
 }

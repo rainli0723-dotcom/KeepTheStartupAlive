@@ -67,7 +67,7 @@ export async function callStructuredLlm<T>(input: {
       ? await undiciFetch(requestUrl, { ...requestInit, dispatcher })
       : await fetch(requestUrl, requestInit);
   } catch (error) {
-    throw new Error(formatNetworkError(error, requestUrl));
+    throw new Error(formatNetworkError(error, requestUrl, timeoutDuration));
   } finally {
     clearTimeout(timeout);
   }
@@ -77,7 +77,7 @@ export async function callStructuredLlm<T>(input: {
   }
 
   const payload = await response.json();
-  let content = payload.choices?.[0]?.message?.content;
+  const content = payload.choices?.[0]?.message?.content;
   
   if (!content) throw new Error("LLM returned an empty response.");
   
@@ -97,7 +97,7 @@ export async function callStructuredLlm<T>(input: {
   return input.schema.parse(JSON.parse(content));
 }
 
-function formatNetworkError(error: unknown, requestUrl: string) {
+function formatNetworkError(error: unknown, requestUrl: string, timeoutDuration: number) {
   const cause = error instanceof Error ? (error.cause as { code?: string; message?: string } | undefined) : undefined;
   const message = error instanceof Error ? error.message : String(error);
   const causeText = [cause?.code, cause?.message].filter(Boolean).join(" ");

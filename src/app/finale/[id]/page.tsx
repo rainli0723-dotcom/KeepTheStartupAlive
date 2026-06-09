@@ -3,8 +3,9 @@ import { AppShell, PageHeader } from "@/components/app-shell";
 import { FinaleDetailClient } from "@/components/finale-detail-client";
 import { ensureDatabase } from "@/lib/bootstrap-db";
 import { getDb } from "@/lib/db";
-import { parseJson, parseInteractionLog } from "@/lib/domain";
+import { parseJson } from "@/lib/domain";
 import type { FinaleReport } from "@/lib/finale";
+import { parseInteractionLog } from "@/lib/simulation-run";
 
 export const dynamic = "force-dynamic";
 

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Home, Loader2, Send, StopCircle } from "lucide-react";
+import { ArrowRight, Check, Loader2, Send, StopCircle } from "lucide-react";
 import type { MeetingInteractionLog } from "@/lib/simulation-run";
 
 type DecisionOptionView = {
@@ -56,8 +56,14 @@ type RunState = {
   latestMeeting: MeetingView | null;
 };
 
+type MeetingIntroItem =
+  | { type: "system"; title: string; body: string }
+  | { type: "message"; speaker: string; message: string }
+  | { type: "conclusion"; title: string; body: string };
+
 export function SimulationRunClient({ run }: { run: RunState }) {
   const router = useRouter();
+  const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const [pending, setPending] = useState<"message" | "cycle" | "end" | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -70,13 +76,59 @@ export function SimulationRunClient({ run }: { run: RunState }) {
   const [showFinaleModal, setShowFinaleModal] = useState(false);
   const [finaleData, setFinaleData] = useState<{ title: string; summary: string; score: number } | null>(null);
   const [decisionLocked, setDecisionLocked] = useState(false);
+  const [visibleIntro, setVisibleIntro] = useState({ meetingId: "", count: 0 });
 
   const meeting = run.latestMeeting;
+  const introItems = useMemo<MeetingIntroItem[]>(() => {
+    if (!meeting) return [];
+    return [
+      {
+        type: "system",
+        title: meeting.businessEvent?.title ?? "本轮事件",
+        body: meeting.businessEvent?.description ?? "",
+      },
+      ...meeting.participantViews.map((view) => ({
+        type: "message" as const,
+        speaker: view.roleName,
+        message: view.view,
+      })),
+      { type: "conclusion", title: "阶段结论", body: meeting.conclusion },
+    ];
+  }, [meeting]);
+  const visibleIntroCount = meeting?.id === visibleIntro.meetingId ? visibleIntro.count : 0;
+  const shownIntroItems = introItems.slice(0, visibleIntroCount);
+  const introComplete = !meeting || visibleIntroCount >= introItems.length;
+  const meetingId = meeting?.id ?? "";
+  const introItemCount = introItems.length;
   const allInteractions = useMemo(
     () => [...(meeting?.interactions ?? []), ...localInteractions],
     [meeting?.interactions, localInteractions],
   );
   const isFinished = run.completedCycles >= run.totalCycles;
+
+  useEffect(() => {
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const revealNext = (count: number) => {
+      timeoutId = setTimeout(() => {
+        if (cancelled) return;
+        const nextCount = count + 1;
+        setVisibleIntro({ meetingId, count: nextCount });
+        if (nextCount < introItemCount) revealNext(nextCount);
+      }, count === 0 ? 350 : 950);
+    };
+
+    if (meetingId && introItemCount > 0) revealNext(0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [meetingId, introItemCount]);
+
+  useEffect(() => {
+    conversationEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [visibleIntroCount, allInteractions]);
 
   function toggleRoundMember(memberId: string) {
     setRoundMemberIds((current) =>
@@ -265,7 +317,7 @@ export function SimulationRunClient({ run }: { run: RunState }) {
     }
   }
 
-  async function fetchAndShowFinale() {
+  const fetchAndShowFinale = useCallback(async () => {
     const res = await fetch("/api/finale");
     const body = await res.json();
     if (body.finale) {
@@ -274,13 +326,16 @@ export function SimulationRunClient({ run }: { run: RunState }) {
     } else {
       router.push("/");
     }
-  }
+  }, [router]);
 
   useEffect(() => {
     if (isFinished && !showFinaleModal) {
-      fetchAndShowFinale();
+      const timeoutId = setTimeout(() => {
+        fetchAndShowFinale();
+      }, 0);
+      return () => clearTimeout(timeoutId);
     }
-  }, [isFinished]);
+  }, [fetchAndShowFinale, isFinished, showFinaleModal]);
 
   return (
     <main className="min-h-screen bg-[#0c0f14] text-slate-100">
@@ -464,26 +519,28 @@ export function SimulationRunClient({ run }: { run: RunState }) {
               </div>
             ) : (
               <div className="mx-auto max-w-4xl space-y-4">
-                <SystemCard title={meeting.businessEvent?.title ?? "本轮事件"} body={meeting.businessEvent?.description ?? ""} />
-                {meeting.participantViews.map((view, index) => (
-                  <ChatMessage key={`${view.roleName}-${index}`} speaker={view.roleName} message={view.view} />
+                {shownIntroItems.map((item, index) => (
+                  <MeetingIntroEntry key={`${meeting.id}-${item.type}-${index}`} item={item} />
                 ))}
-                <SystemCard title="阶段结论" body={meeting.conclusion} />
-                {allInteractions.map((item, index) => (
-                  <div key={`${item.createdAt}-${index}`} className="space-y-3">
-                    <ChatMessage speaker={item.speaker} message={item.message} mine />
-                    {item.dialogueTurns?.map((turn, turnIndex) => (
-                      <ChatMessage key={`${turn.speaker}-${turnIndex}`} speaker={turn.speaker} message={turn.message} />
-                    ))}
-                    {item.assistantReply ? <SystemCard title="会议主持归纳" body={item.assistantReply} /> : null}
-                    {item.evaluation ? (
-                      <div className="rounded-xl border border-emerald-300/40 bg-gradient-to-r from-emerald-300/15 to-cyan-300/10 px-5 py-4 shadow-[0_0_20px_rgba(16,185,229,0.1)]">
-                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200/80">📊 本轮决策影响评估</div>
-                        <p className="text-sm leading-6 text-emerald-50">{item.evaluation}</p>
+                {!introComplete ? <TypingIndicator speaker={meeting.chair || "会议主持"} /> : null}
+                {introComplete
+                  ? allInteractions.map((item, index) => (
+                      <div key={`${item.createdAt}-${index}`} className="space-y-3">
+                        <ChatMessage speaker={item.speaker} message={item.message} mine />
+                        {item.dialogueTurns?.map((turn, turnIndex) => (
+                          <ChatMessage key={`${turn.speaker}-${turnIndex}`} speaker={turn.speaker} message={turn.message} />
+                        ))}
+                        {item.assistantReply ? <SystemCard title="会议主持归纳" body={item.assistantReply} /> : null}
+                        {item.evaluation ? (
+                          <div className="rounded-xl border border-emerald-300/40 bg-gradient-to-r from-emerald-300/15 to-cyan-300/10 px-5 py-4 shadow-[0_0_20px_rgba(16,185,229,0.1)]">
+                            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200/80">本轮决策影响评估</div>
+                            <p className="text-sm leading-6 text-emerald-50">{item.evaluation}</p>
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                ))}
+                    ))
+                  : null}
+                <div ref={conversationEndRef} />
               </div>
             )}
           </div>
@@ -509,15 +566,18 @@ export function SimulationRunClient({ run }: { run: RunState }) {
                   className="min-h-20 w-full resize-none bg-transparent px-1 py-1 text-sm leading-6 text-slate-100 outline-none placeholder:text-slate-500"
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
+                  disabled={!introComplete}
                   placeholder="输入你的发言、追问或决策倾向"
                 />
                 <div className="mt-3 flex flex-col gap-2 border-t border-white/10 pt-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-xs text-slate-400">下一轮将使用左侧勾选的 {roundMemberIds.length} 个角色。</div>
+                  <div className="text-xs text-slate-400">
+                    {introComplete ? `下一轮将使用左侧勾选的 ${roundMemberIds.length} 个角色。` : "会议发言正在逐条展开。"}
+                  </div>
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => submitMessage()}
-                      disabled={pending === "message"}
+                      disabled={pending === "message" || !introComplete}
                       className="inline-flex items-center gap-2 rounded-md bg-[#3370ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4e83ff] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {pending === "message" ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
@@ -557,6 +617,14 @@ function Avatar({ label, active = false }: { label: string; active?: boolean }) 
   );
 }
 
+function MeetingIntroEntry({ item }: { item: MeetingIntroItem }) {
+  if (item.type === "message") {
+    return <ChatMessage speaker={item.speaker} message={item.message} />;
+  }
+
+  return <SystemCard title={item.title} body={item.body} tone={item.type === "conclusion" ? "success" : "info"} />;
+}
+
 function ChatMessage({ speaker, message, mine = false }: { speaker: string; message: string; mine?: boolean }) {
   return (
     <div className={`flex gap-3 ${mine ? "justify-end" : "justify-start"}`}>
@@ -568,6 +636,22 @@ function ChatMessage({ speaker, message, mine = false }: { speaker: string; mess
         </div>
       </div>
       {mine ? <Avatar label={speaker} /> : null}
+    </div>
+  );
+}
+
+function TypingIndicator({ speaker }: { speaker: string }) {
+  return (
+    <div className="flex justify-start gap-3">
+      <Avatar label={speaker} active />
+      <div className="flex max-w-[78%] flex-col items-start">
+        <div className="mb-1 text-xs text-slate-400">{speaker}</div>
+        <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm bg-[#1d2633] px-4 py-3 shadow-sm">
+          <span className="size-1.5 animate-pulse rounded-full bg-slate-300" />
+          <span className="size-1.5 animate-pulse rounded-full bg-slate-300 [animation-delay:120ms]" />
+          <span className="size-1.5 animate-pulse rounded-full bg-slate-300 [animation-delay:240ms]" />
+        </div>
+      </div>
     </div>
   );
 }
