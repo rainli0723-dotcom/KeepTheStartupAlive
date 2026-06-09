@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Loader2, Send, StopCircle } from "lucide-react";
+import { ArrowRight, Check, Download, Loader2, Send, StopCircle } from "lucide-react";
 import type { MeetingInteractionLog } from "@/lib/simulation-run";
 
 type DecisionOptionView = {
@@ -239,6 +239,66 @@ export function SimulationRunClient({ run }: { run: RunState }) {
     setDecisionLocked(false);
     setSelectedOptionId("");
     setPending(null);
+  }
+
+  function exportMeetingBrief() {
+    if (!meeting) return;
+    const lines = [
+      `# ${run.organizationName} - Round ${meeting.cycle} 经营会议纪要`,
+      "",
+      `- 沙盘：${run.workspaceName}`,
+      `- 当前身份：${run.userRole}`,
+      `- 会议主持：${meeting.chair}`,
+      `- 会议议题：${meeting.agenda}`,
+      "",
+      "## 本轮事件",
+      "",
+      `### ${meeting.businessEvent?.title ?? "本轮事件"}`,
+      "",
+      meeting.businessEvent?.description ?? "",
+      "",
+      "## 角色观点",
+      "",
+      ...meeting.participantViews.flatMap((view) => [`### ${view.roleName}`, "", view.view, ""]),
+      "## 阶段结论",
+      "",
+      meeting.conclusion,
+      "",
+      "## 决策方案",
+      "",
+      ...meeting.decisionOptions.flatMap((option, index) => [
+        `### ${index + 1}. ${option.title}`,
+        "",
+        `- 建议：${option.recommendation}`,
+        `- 机会：${option.upside}`,
+        `- 风险：${option.risk}`,
+        `- 资源需求：${option.resourceNeed}`,
+        "",
+      ]),
+      "## 用户互动记录",
+      "",
+      ...(allInteractions.length
+        ? allInteractions.flatMap((item) => [
+            `### ${item.speaker}`,
+            "",
+            item.message,
+            "",
+            ...(item.dialogueTurns ?? []).flatMap((turn) => [`#### ${turn.speaker}`, "", turn.message, ""]),
+            item.assistantReply ? `主持归纳：${item.assistantReply}` : "",
+            item.evaluation ? `决策影响评估：${item.evaluation}` : "",
+            "",
+          ])
+        : ["暂无用户互动。", ""]),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${run.organizationName}-round-${meeting.cycle}-meeting-brief.md`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function endRun() {
@@ -497,6 +557,15 @@ export function SimulationRunClient({ run }: { run: RunState }) {
               <h2 className="mt-1 text-xl font-semibold text-white">{meeting?.businessEvent?.title ?? "本轮专项事件"}</h2>
             </div>
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={exportMeetingBrief}
+                disabled={!meeting}
+                className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Download size={16} />
+                导出纪要
+              </button>
               <button
                 type="button"
                 onClick={endRun}

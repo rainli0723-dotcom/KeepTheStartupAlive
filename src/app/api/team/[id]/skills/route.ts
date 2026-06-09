@@ -32,7 +32,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (hasFile) {
     fileName = file.name;
     mimeType = file.type || "application/octet-stream";
-    extractedText = [extractedText, await extractTextFromUpload(file)].filter(Boolean).join("\n\n");
+    try {
+      extractedText = [extractedText, await extractTextFromUpload(file)].filter(Boolean).join("\n\n");
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: `文件解析失败：${errorMessage}` }, { status: 400 });
+    }
   }
 
   if (skillText) {
