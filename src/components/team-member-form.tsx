@@ -65,25 +65,7 @@ export function TeamMemberForm({ horizontal = false }: { horizontal?: boolean })
         <div className="flex flex-wrap gap-3 items-end">
           <label className="text-sm text-slate-200">
             名称
-            <input className="twin-field mt-1 w-32" name="name" placeholder="姓名" required />
-          </label>
-          <label className="text-sm text-slate-200">
-            角色
-            <select className="twin-field mt-1 w-32" name="rolePreset" defaultValue="CEO" required>
-              {editableRoleOptions.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm text-slate-200">
-            自定义
-            <input
-              className="twin-field mt-1 w-32"
-              name="roleCustom"
-              placeholder="自定义角色"
-            />
+            <input className="twin-field mt-1 w-44" name="name" placeholder="姓名或角色名称" required />
           </label>
           <label className="inline-flex items-center gap-2 rounded-md border border-cyan-300/20 bg-cyan-300/5 px-3 py-2 text-sm text-cyan-50">
             <input className="accent-cyan-300" type="checkbox" name="isRealMember" />
@@ -96,6 +78,27 @@ export function TeamMemberForm({ horizontal = false }: { horizontal?: boolean })
             {pending ? <Loader2 className="animate-spin" size={16} /> : <UserPlus size={16} />}
             {pending ? "新增中..." : "新增"}
           </button>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)]">
+          <label className="text-sm text-slate-200">
+            角色库
+            <select className="twin-field mt-1" name="rolePreset" defaultValue="CEO" required>
+              {editableRoleOptions.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm text-slate-200">
+            自定义角色
+            <input
+              className="twin-field mt-1"
+              name="roleCustom"
+              placeholder="填写后覆盖角色库选择"
+            />
+          </label>
         </div>
         
         <div className="grid gap-3 md:grid-cols-6">

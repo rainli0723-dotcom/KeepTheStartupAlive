@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, Edit3, Loader2, Save, Trash2, X } from "lu
 import type { CapabilityMap } from "@/lib/domain";
 import { parseCapabilities, parseMetrics } from "@/lib/serializers";
 import {
+  customRoleOption,
   editableCapabilityFields,
   editableRoleOptions,
   metricsFromLines,
@@ -36,7 +37,7 @@ export function TeamMemberCardActions({ member }: { member: EditableMember }) {
 
   const parsedCapabilities = useMemo(() => parseCapabilities(member.capabilities), [member.capabilities]);
   const parsedMetrics = useMemo(() => parseMetrics(member.customMetrics), [member.customMetrics]);
-  const isPresetRole = editableRoleOptions.includes(member.roleName as (typeof editableRoleOptions)[number]);
+  const isPresetRole = editableRoleOptions.includes(member.roleName);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -152,7 +153,7 @@ export function TeamMemberCardActions({ member }: { member: EditableMember }) {
             </label>
             <label className="text-sm text-slate-200">
               角色
-              <select className="twin-field mt-1" name="rolePreset" defaultValue={isPresetRole ? member.roleName : "其他负责人"} required>
+              <select className="twin-field mt-1" name="rolePreset" defaultValue={isPresetRole ? member.roleName : customRoleOption} required>
                 {editableRoleOptions.map((role) => (
                   <option key={role} value={role}>
                     {role}

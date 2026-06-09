@@ -1,6 +1,11 @@
-import type { CustomMetric } from "./domain";
+import { roleTemplates, type CustomMetric } from "./domain";
 
-export const editableRoleOptions = ["CEO", "CIO", "其他负责人"] as const;
+export const customRoleOption = "其他负责人";
+
+export const editableRoleOptions = [
+  ...roleTemplates.map((roleTemplate) => roleTemplate.name),
+  customRoleOption,
+] as const;
 
 export const editableCapabilityFields = [
   ["sales", "销售能力"],
