@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Play, Users, GitBranch, BriefcaseBusiness, LayoutDashboard } from "lucide-react";
+import { Play, Users, GitBranch, BriefcaseBusiness, LayoutDashboard, ShieldCheck } from "lucide-react";
 import { DemoLaunchButton } from "@/components/demo-launch-button";
 
 export default function HomePage() {
@@ -15,8 +15,8 @@ export default function HomePage() {
 
       {/* Description */}
       <p className="mb-10 max-w-md text-center text-base text-[var(--muted)]">
-        通过 AI 模拟创业过程中的关键决策，建立数字孪生团队，
-        体验真实的经营挑战与博弈。
+        上传企业背景，生成数字孪生管理层，模拟关键经营会议，
+        输出可交付的决策纪要与复盘报告。
       </p>
 
       <div className="flex flex-col items-center gap-3 sm:flex-row">
@@ -29,6 +29,10 @@ export default function HomePage() {
           手动创建沙盘
         </Link>
       </div>
+      <Link href="/security" className="mt-5 inline-flex items-center gap-2 text-sm text-cyan-100/80 hover:text-cyan-50">
+        <ShieldCheck size={16} />
+        查看企业安全与交付说明
+      </Link>
 
       {/* Feature Cards - 简洁版 */}
       <div className="mt-16 grid gap-4 md:grid-cols-4 max-w-3xl">
@@ -49,8 +53,8 @@ export default function HomePage() {
         />
         <FeatureCard 
           icon={<BriefcaseBusiness size={20} />}
-          title="组织档案"
-          description="完整档案"
+          title="交付报告"
+          description="纪要与复盘导出"
         />
       </div>
     </div>

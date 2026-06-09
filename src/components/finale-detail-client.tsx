@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Edit2, Save, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Edit2, Save, X } from "lucide-react";
 import type { FinaleReport } from "@/lib/finale";
 
 type FinaleDetail = FinaleReport & {
@@ -58,6 +58,63 @@ export function FinaleDetailClient({ finale, meetings }: FinaleDetailClientProps
   function cancelEdit() {
     setEditingSection(null);
     setEditedContent({});
+  }
+
+  function exportFinaleReport() {
+    const lines = [
+      `# ${finale.title}`,
+      "",
+      `- 结局评分：${Math.round(finale.score)}`,
+      `- 完成轮次：${finale.completedCycles}`,
+      `- 结局类型：${finale.outcomeType}`,
+      "",
+      "## 总结概述",
+      "",
+      finale.summary,
+      "",
+      "## 关键驱动",
+      "",
+      ...finale.keyDrivers.map((item) => `- ${item}`),
+      "",
+      "## 决策轨迹",
+      "",
+      ...finale.decisionTrace.map((item) => `- ${item}`),
+      "",
+      "## 其他可能结局",
+      "",
+      ...finale.alternativeEndings.map((item) => `- ${item}`),
+      "",
+      "## 后续动作",
+      "",
+      ...finale.nextActions.map((item) => `- ${item}`),
+      "",
+      "## 会议回顾",
+      "",
+      ...meetings.flatMap((meeting) => [
+        `### Cycle ${meeting.cycle}: ${meeting.agenda}`,
+        "",
+        meeting.businessEvent ? `事件：${meeting.businessEvent.title}` : "",
+        meeting.businessEvent?.description ?? "",
+        "",
+        "角色观点：",
+        ...meeting.participantViews.map((view) => `- ${view.roleName}: ${view.view}`),
+        "",
+        "决策方案：",
+        ...meeting.decisionOptions.map((option) => `- ${option.title}: ${option.recommendation}`),
+        "",
+        `会议结论：${meeting.conclusion}`,
+        "",
+      ]),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${finale.title}-复盘报告.md`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function saveEdit(field: string) {
@@ -129,9 +186,19 @@ export function FinaleDetailClient({ finale, meetings }: FinaleDetailClientProps
               </div>
             )}
           </div>
-          <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-6 py-5 text-center lg:shrink-0">
-            <div className="font-mono text-5xl font-semibold text-white">{Math.round(finale.score)}</div>
-            <div className="mt-2 text-xs text-cyan-100">结局评分</div>
+          <div className="space-y-3 lg:shrink-0">
+            <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-6 py-5 text-center">
+              <div className="font-mono text-5xl font-semibold text-white">{Math.round(finale.score)}</div>
+              <div className="mt-2 text-xs text-cyan-100">结局评分</div>
+            </div>
+            <button
+              type="button"
+              onClick={exportFinaleReport}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-slate-200 hover:bg-white/[0.08]"
+            >
+              <Download size={16} />
+              导出复盘
+            </button>
           </div>
         </div>
       </div>

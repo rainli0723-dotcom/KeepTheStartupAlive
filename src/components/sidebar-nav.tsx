@@ -7,9 +7,9 @@ import {
   BriefcaseBusiness,
   FileText,
   GitBranch,
-  LayoutDashboard,
   LibraryBig,
   PlayCircle,
+  ShieldCheck,
   UsersRound,
 } from "lucide-react";
 
@@ -20,6 +20,7 @@ const navItems = [
   { href: "/team", label: "数字孪生", icon: UsersRound },
   { href: "/scenarios", label: "场景库", icon: GitBranch },
   { href: "/reports", label: "复盘报告", icon: FileText },
+  { href: "/security", label: "安全说明", icon: ShieldCheck },
 ];
 
 const NavItem = memo(function NavItem({
@@ -72,7 +73,8 @@ export function SidebarNav() {
   useEffect(() => {
     if (!optimisticHref) return;
     if (optimisticHref === pathname) {
-      setOptimisticHref("");
+      const timeoutId = setTimeout(() => setOptimisticHref(""), 0);
+      return () => clearTimeout(timeoutId);
     }
   }, [pathname, optimisticHref]);
 
