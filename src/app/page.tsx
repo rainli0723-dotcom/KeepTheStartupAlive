@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Play, Users, GitBranch, BriefcaseBusiness, LayoutDashboard } from "lucide-react";
+import { DemoLaunchButton } from "@/components/demo-launch-button";
 
 export default function HomePage() {
   return (
@@ -18,14 +19,16 @@ export default function HomePage() {
         体验真实的经营挑战与博弈。
       </p>
 
-      {/* Start Button */}
-      <Link 
-        href="/simulation/start"
-        className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-8 py-3 text-base font-semibold text-white transition-colors hover:bg-cyan-500"
-      >
-        <Play size={18} />
-        开始模拟
-      </Link>
+      <div className="flex flex-col items-center gap-3 sm:flex-row">
+        <DemoLaunchButton />
+        <Link
+          href="/simulation/start"
+          className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-8 py-3 text-base font-semibold text-white transition-colors hover:bg-white/10"
+        >
+          <Play size={18} />
+          手动创建沙盘
+        </Link>
+      </div>
 
       {/* Feature Cards - 简洁版 */}
       <div className="mt-16 grid gap-4 md:grid-cols-4 max-w-3xl">
