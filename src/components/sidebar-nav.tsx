@@ -10,10 +10,12 @@ import {
   LibraryBig,
   PlayCircle,
   ShieldCheck,
+  SquareStack,
   UsersRound,
 } from "lucide-react";
 
 const navItems = [
+  { href: "/workspaces", label: "沙盘工作区", icon: SquareStack },
   { href: "/simulation/start", label: "开始模拟", icon: PlayCircle },
   { href: "/organization", label: "组织档案", icon: BriefcaseBusiness },
   { href: "/roles", label: "角色库", icon: LibraryBig },
