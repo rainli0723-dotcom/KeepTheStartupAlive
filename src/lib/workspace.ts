@@ -1,11 +1,14 @@
 import { getDb } from "./db";
 import { ensureDatabase } from "./bootstrap-db";
+import { getActiveTenant } from "./tenant";
 
 // Lightweight version for simulation preparation page
 export async function getActiveWorkspaceForSimulationPrep() {
   await ensureDatabase();
   const db = getDb();
+  const tenant = await getActiveTenant();
   const workspace = await db.simulationWorkspace.findFirst({
+    where: { tenantId: tenant.id },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -81,7 +84,9 @@ export async function getActiveWorkspaceForSimulationPrep() {
 export async function getActiveWorkspaceForOverview() {
   await ensureDatabase();
   const db = getDb();
+  const tenant = await getActiveTenant();
   const workspace = await db.simulationWorkspace.findFirst({
+    where: { tenantId: tenant.id },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -175,7 +180,9 @@ export async function getActiveWorkspaceForOverview() {
 export async function getActiveWorkspaceForTeam() {
   await ensureDatabase();
   const db = getDb();
+  const tenant = await getActiveTenant();
   return db.simulationWorkspace.findFirst({
+    where: { tenantId: tenant.id },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -195,7 +202,9 @@ export async function getActiveWorkspaceForTeam() {
 export async function getActiveWorkspace() {
   await ensureDatabase();
   const db = getDb();
+  const tenant = await getActiveTenant();
   return db.simulationWorkspace.findFirst({
+    where: { tenantId: tenant.id },
     orderBy: { updatedAt: "desc" },
     include: {
       organizationProfile: {

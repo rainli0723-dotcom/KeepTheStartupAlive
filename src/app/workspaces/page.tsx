@@ -1,11 +1,14 @@
 import { AppShell, EmptyState, PageHeader } from "@/components/app-shell";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { getDb } from "@/lib/db";
+import { getActiveTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
 export default async function WorkspacesPage() {
+  const tenant = await getActiveTenant();
   const workspaces = await getDb().simulationWorkspace.findMany({
+    where: { tenantId: tenant.id },
     orderBy: { updatedAt: "desc" },
     include: {
       organizationProfile: true,

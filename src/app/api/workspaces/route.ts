@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
-import { ensureDefaultTenant, writeAuditLog } from "@/lib/tenant";
+import { getActiveTenant, writeAuditLog } from "@/lib/tenant";
 
 const workspaceActionSchema = z.object({
   workspaceId: z.string().min(1),
 });
 
 export async function GET() {
+  const tenant = await getActiveTenant();
   const workspaces = await getDb().simulationWorkspace.findMany({
+    where: { tenantId: tenant.id },
     orderBy: { updatedAt: "desc" },
     include: {
       tenant: true,
@@ -43,7 +45,13 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   const input = workspaceActionSchema.parse(await request.json());
-  const tenant = await ensureDefaultTenant();
+  const tenant = await getActiveTenant();
+  const target = await getDb().simulationWorkspace.findFirst({
+    where: { id: input.workspaceId, tenantId: tenant.id },
+  });
+  if (!target) {
+    return NextResponse.json({ error: "未找到当前企业下的沙盘工作区" }, { status: 404 });
+  }
   const workspace = await getDb().simulationWorkspace.update({
     where: { id: input.workspaceId },
     data: { updatedAt: new Date(), tenantId: tenant.id },

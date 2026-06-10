@@ -1,22 +1,20 @@
 import { AppShell, PageHeader, Panel } from "@/components/app-shell";
 import { getDb } from "@/lib/db";
-import { ensureDefaultTenant } from "@/lib/tenant";
+import { getActiveTenant } from "@/lib/tenant";
 import { parseJson } from "@/lib/domain";
 
 export const dynamic = "force-dynamic";
 
 export default async function EnterprisePage() {
-  await ensureDefaultTenant();
-  const tenants = await getDb().enterpriseTenant.findMany({
-    orderBy: { updatedAt: "desc" },
+  const activeTenant = await getActiveTenant();
+  const tenant = await getDb().enterpriseTenant.findUnique({
+    where: { id: activeTenant.id },
     include: {
       members: { orderBy: { createdAt: "asc" } },
       workspaces: { orderBy: { updatedAt: "desc" }, take: 6 },
       auditLogs: { orderBy: { createdAt: "desc" }, take: 12 },
     },
   });
-
-  const tenant = tenants[0];
 
   return (
     <AppShell>

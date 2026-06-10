@@ -36,8 +36,27 @@ export async function ensureDefaultTenant() {
   return tenant;
 }
 
-export async function assignWorkspaceToDefaultTenant(workspaceId: string) {
+export async function getActiveTenant() {
   const tenant = await ensureDefaultTenant();
+  const result = await getDb().simulationWorkspace.updateMany({
+    where: { tenantId: null },
+    data: { tenantId: tenant.id },
+  });
+
+  if (result.count > 0) {
+    await writeAuditLog({
+      tenantId: tenant.id,
+      action: "workspace.backfilled",
+      entityType: "SimulationWorkspace",
+      metadata: { count: result.count },
+    });
+  }
+
+  return tenant;
+}
+
+export async function assignWorkspaceToDefaultTenant(workspaceId: string) {
+  const tenant = await getActiveTenant();
   await getDb().simulationWorkspace.update({
     where: { id: workspaceId },
     data: { tenantId: tenant.id },

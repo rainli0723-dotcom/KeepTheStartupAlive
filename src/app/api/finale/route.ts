@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { parseState, toJson } from "@/lib/serializers";
 import { getActiveWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
-import { buildTwentyRoundFinale, type FinaleReport } from "@/lib/finale";
+import type { FinaleReport } from "@/lib/finale";
 import { callStructuredLlm, finaleSchema } from "@/lib/llm";
 
 type FinaleRow = {
@@ -27,54 +28,38 @@ type FinaleMeeting = Prisma.StrategyMeetingGetPayload<{
   include: { businessEvent: true; decisionOptions: true };
 }>;
 
+type LlmFinaleReport = z.infer<typeof finaleSchema>;
+
 export async function GET() {
   const workspace = await getActiveWorkspace();
   if (!workspace) return NextResponse.json({ finale: null });
 
   const row = await getExistingFinale(workspace.id);
-  if (!row) return NextResponse.json({ finale: null });
+  if (!row || !isLlmGenerated(row)) {
+    return NextResponse.json({ finale: null, enriched: false });
+  }
 
-  const finale = serializeFinale(row);
   return NextResponse.json({
-    finale,
-    enriched: !row.rawReport.includes('"generatedBy":"fallback"'),
+    finale: serializeFinale(row),
+    enriched: true,
   });
 }
 
 export async function POST() {
   const workspace = await getActiveWorkspace();
-  if (!workspace) return NextResponse.json({ error: "请先创建沙盘工作区" }, { status: 404 });
+  if (!workspace) {
+    return NextResponse.json({ error: "未找到可生成结局的沙盘工作区" }, { status: 404 });
+  }
 
   const completedCycles = Math.max(0, workspace.currentCycle - 1);
   const forceGenerate = Array.isArray(workspace.events) && workspace.events.length > 0;
   if (completedCycles < 1 && !forceGenerate) {
-    return NextResponse.json({ error: "需要完成至少 1 轮后才能生成复盘报告" }, { status: 409 });
+    return NextResponse.json({ error: "至少完成 1 轮经营周期后，才能生成结局" }, { status: 409 });
   }
 
   const existing = await getExistingFinale(workspace.id);
-  if (existing) {
-    const finale = serializeFinale(existing);
-    const enriched = !existing.rawReport.includes('"generatedBy":"fallback"');
-
-    // If the existing finale is just the fallback, trigger enrichment in background
-    if (!enriched) {
-      const meetings = await getDb().strategyMeeting.findMany({
-        where: { workspaceId: workspace.id },
-        orderBy: [{ cycle: "asc" }, { createdAt: "asc" }],
-        include: { businessEvent: true, decisionOptions: true },
-      });
-      enrichFinaleWithLlm(
-        existing.id,
-        workspace,
-        meetings,
-        parseState(workspace.organizationState),
-        Math.max(0, workspace.currentCycle - 1),
-      ).catch((err) => {
-        console.warn("[finale] background enrichment failed:", err instanceof Error ? err.message : String(err));
-      });
-    }
-
-    return NextResponse.json({ finale, enriched, reused: true });
+  if (existing && isLlmGenerated(existing)) {
+    return NextResponse.json({ finale: serializeFinale(existing), enriched: true, reused: true });
   }
 
   const db = getDb();
@@ -85,151 +70,164 @@ export async function POST() {
   });
 
   const state = parseState(workspace.organizationState);
+  let generated: LlmFinaleReport;
+  try {
+    generated = await generateFinaleWithLlm(workspace, meetings, state, completedCycles);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "LLM 结局生成失败";
+    return NextResponse.json(
+      { error: message, detail: "结局不会使用内置 fallback。请确认 LLM 配置可用后重试。" },
+      { status: 503 },
+    );
+  }
 
-  // Build and save INSTANT fallback first (pure math, ~0ms)
-  const fallbackInput = {
-    state,
-    completedCycles,
-    events: meetings
-      .map((m) => m.businessEvent)
-      .filter((e): e is NonNullable<typeof e> => Boolean(e))
-      .map((e) => ({ eventType: e.eventType, title: e.title, description: e.description, cycle: e.cycle })),
-    meetings: meetings.map((m) => ({ cycle: m.cycle, conclusion: m.conclusion })),
-  };
-  const fallback = finaleSchema.parse(buildTwentyRoundFinale(fallbackInput));
-  const fallbackReport = { ...fallback, generatedBy: "fallback" as const };
+  const id = existing?.id ?? randomUUID();
+  if (existing) {
+    await updateFinale(id, generated);
+  } else {
+    await insertFinale(id, workspace.id, completedCycles, generated);
+  }
 
-  const id = randomUUID();
-  const orgProfile = workspace.organizationProfile;
+  await archiveOrganization(workspace, generated);
 
-  await db.$executeRaw`
+  return NextResponse.json({
+    finale: { id, workspaceId: workspace.id, ...generated, score: Math.round(generated.score), completedCycles },
+    enriched: true,
+    reused: false,
+  });
+}
+
+async function generateFinaleWithLlm(
+  workspace: NonNullable<Awaited<ReturnType<typeof getActiveWorkspace>>>,
+  meetings: FinaleMeeting[],
+  state: Record<string, number>,
+  completedCycles: number,
+) {
+  return callStructuredLlm({
+    schema: finaleSchema,
+    timeoutMs: 180000,
+    messages: [
+      {
+        role: "user",
+        content: JSON.stringify({
+          task: "为一个 To B 创业公司经营模拟生成最终结局报告。所有会展示给用户的结局标题、摘要、关键原因、决策路径、替代结局和下一步行动都必须由你生成。",
+          organization: {
+            name: workspace.organizationProfile.name,
+            stage: workspace.organizationProfile.stage,
+            industry: workspace.organizationProfile.industry,
+            product: workspace.organizationProfile.product,
+            market: workspace.organizationProfile.market,
+          },
+          finalMetrics: {
+            cashflow: state.cashflow,
+            growth: state.growth,
+            teamPressure: state.teamPressure,
+            technicalRisk: state.technicalRisk,
+            financingAttractiveness: state.financingAttractiveness,
+            survivalProbability: state.survivalProbability,
+          },
+          completedCycles,
+          timeline: meetings.slice(0, 20).map((meeting) => ({
+            cycle: meeting.cycle,
+            event: meeting.businessEvent
+              ? {
+                  type: meeting.businessEvent.eventType,
+                  title: meeting.businessEvent.title,
+                  description: meeting.businessEvent.description.slice(0, 400),
+                }
+              : null,
+            agenda: meeting.agenda?.slice(0, 300),
+            decision: meeting.conclusion?.slice(0, 400),
+            options: meeting.decisionOptions.map((option) => ({
+              title: option.title,
+              recommendation: option.recommendation.slice(0, 240),
+              risk: option.risk.slice(0, 180),
+            })),
+          })),
+          outputContract: {
+            outcomeType:
+              "one of: bankruptcy, ipo, acquisition, stable_growth, restructure, shutdown, pivot, strategic_partnership, scale_up",
+            title: "string",
+            summary: "string, 250-450 Chinese characters",
+            score: "number 0-100",
+            keyDrivers: ["3-5 strings, explain why this ending happened"],
+            decisionTrace: ["3-6 strings, connect important decisions to consequences"],
+            alternativeEndings: ["2-3 strings, plausible other endings and what would have changed them"],
+            nextActions: ["3-5 strings, concrete next actions for the management team"],
+          },
+          requirements: [
+            "只返回 JSON object，不要 Markdown",
+            "不要使用游戏化表达",
+            "结局必须基于 timeline 和 finalMetrics，不要写成通用模板",
+            "decisionTrace 必须引用具体轮次或具体决策",
+            "summary 必须像正式经营复盘，不要像宣传文案",
+          ],
+        }),
+      },
+    ],
+  });
+}
+
+async function insertFinale(
+  id: string,
+  workspaceId: string,
+  completedCycles: number,
+  finale: LlmFinaleReport,
+) {
+  const report = { ...finale, generatedBy: "llm" as const };
+  await getDb().$executeRaw`
     INSERT INTO SimulationFinale (
       id, workspaceId, completedCycles, outcomeType, title, summary, score,
       keyDrivers, decisionTrace, alternativeEndings, nextActions, rawReport, createdAt
     )
     VALUES (
-      ${id}, ${workspace.id}, ${completedCycles}, ${fallback.outcomeType}, ${fallback.title}, ${fallback.summary}, ${Math.round(fallback.score)},
-      ${toJson(fallback.keyDrivers)}, ${toJson(fallback.decisionTrace)}, ${toJson(fallback.alternativeEndings)}, ${toJson(fallback.nextActions)}, ${toJson(fallbackReport)}, CURRENT_TIMESTAMP
+      ${id}, ${workspaceId}, ${completedCycles}, ${finale.outcomeType}, ${finale.title}, ${finale.summary}, ${Math.round(finale.score)},
+      ${toJson(finale.keyDrivers)}, ${toJson(finale.decisionTrace)}, ${toJson(finale.alternativeEndings)}, ${toJson(finale.nextActions)}, ${toJson(report)}, CURRENT_TIMESTAMP
     )
   `;
-
-  if (orgProfile) {
-    try {
-      const archiveId = randomUUID();
-      await db.$executeRaw`
-        INSERT INTO OrganizationArchive (
-          id, organizationProfileId, name, stage, industry, product, market,
-          cashflow, revenue, teamSize, governanceStructure, keyRisks, finalOutcome, finalScore, simulationEndedAt
-        )
-        VALUES (
-          ${archiveId}, ${orgProfile.id}, ${orgProfile.name}, ${orgProfile.stage}, ${orgProfile.industry},
-          ${orgProfile.product}, ${orgProfile.market}, ${orgProfile.cashflow}, ${orgProfile.revenue},
-          ${orgProfile.teamSize}, ${orgProfile.governanceStructure}, ${orgProfile.keyRisks},
-          ${fallback.outcomeType}, ${Math.round(fallback.score)}, CURRENT_TIMESTAMP
-        )
-      `;
-    } catch (err) {
-      console.warn("[finale] Failed to archive organization:", err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  // Fire-and-forget: enrich with LLM in background
-  enrichFinaleWithLlm(id, workspace, meetings, state, completedCycles).catch((err) => {
-    console.warn("[finale] background LLM enrichment failed:", err instanceof Error ? err.message : String(err));
-  });
-
-  return NextResponse.json({
-    finale: { id, ...fallback, completedCycles },
-    enriched: false,
-    reused: false,
-  });
 }
 
-async function enrichFinaleWithLlm(
-  finaleId: string,
-  workspace: Awaited<ReturnType<typeof getActiveWorkspace>>,
-  meetings: FinaleMeeting[],
-  state: Record<string, number>,
-  completedCycles: number,
+async function updateFinale(id: string, finale: LlmFinaleReport) {
+  const report = { ...finale, generatedBy: "llm" as const };
+  await getDb().$executeRaw`
+    UPDATE SimulationFinale
+    SET
+      outcomeType = ${finale.outcomeType},
+      title = ${finale.title},
+      summary = ${finale.summary},
+      score = ${Math.round(finale.score)},
+      keyDrivers = ${toJson(finale.keyDrivers)},
+      decisionTrace = ${toJson(finale.decisionTrace)},
+      alternativeEndings = ${toJson(finale.alternativeEndings)},
+      nextActions = ${toJson(finale.nextActions)},
+      rawReport = ${toJson(report)}
+    WHERE id = ${id}
+  `;
+}
+
+async function archiveOrganization(
+  workspace: NonNullable<Awaited<ReturnType<typeof getActiveWorkspace>>>,
+  finale: LlmFinaleReport,
 ) {
-  if (!workspace) return;
+  const orgProfile = workspace.organizationProfile;
+  if (!orgProfile) return;
 
   try {
-    const enriched = await callStructuredLlm({
-      schema: finaleSchema,
-      timeoutMs: 180000,
-      messages: [
-        {
-          role: "user",
-          content: JSON.stringify({
-            task: "为商业模拟沙盘生成最终结算复盘报告。根据事件链和决策历史，判定组织结局。",
-            organization: {
-              name: workspace.organizationProfile.name,
-              stage: workspace.organizationProfile.stage,
-              industry: workspace.organizationProfile.industry,
-              product: workspace.organizationProfile.product,
-              market: workspace.organizationProfile.market,
-            },
-            finalMetrics: {
-              cashflow: state.cashflow,
-              growth: state.growth,
-              teamPressure: state.teamPressure,
-              technicalRisk: state.technicalRisk,
-              financingAttractiveness: state.financingAttractiveness,
-              survivalProbability: state.survivalProbability,
-            },
-            completedCycles,
-            timeline: (meetings ?? []).slice(0, 20).map((m) => {
-              const event = m.businessEvent;
-              return {
-                cycle: m.cycle,
-                event: event ? `${event.eventType}: ${event.title}` : null,
-                agenda: m.agenda?.slice(0, 200),
-                decision: m.conclusion?.slice(0, 300),
-                options: m.decisionOptions.map((o) => o.title),
-              };
-            }),
-            outputContract: {
-              outcomeType: "bankruptcy | ipo | acquisition | stable_growth | restructure | shutdown | pivot | strategic_partnership | scale_up",
-              title: "string - 结局标题",
-              summary: "string - 300字以内复盘摘要",
-              score: "number 0-100",
-              keyDrivers: ["string - 3-5个关键驱动因素"],
-              decisionTrace: ["string - 关键轮次选择"],
-              alternativeEndings: ["string - 2-3个其他可能结局"],
-              nextActions: ["string - 3-5个下一步行动建议"],
-            },
-            requirements: [
-              "只返回 JSON object，无 Markdown",
-              "结局必须体现事件链和决策的因果逻辑",
-              "decisionTrace 引用具体轮次和选择",
-              "语言面向企业复盘报告，务实专业",
-            ],
-          }),
-        },
-      ],
-    });
-
-    // Update the existing fallback record with LLM-enriched content
-    const enrichedReport = { ...enriched, generatedBy: "llm" as const };
-    const db = getDb();
-    await db.$executeRaw`
-      UPDATE SimulationFinale
-      SET
-        outcomeType = ${enriched.outcomeType},
-        title = ${enriched.title},
-        summary = ${enriched.summary},
-        score = ${Math.round(enriched.score)},
-        keyDrivers = ${toJson(enriched.keyDrivers)},
-        decisionTrace = ${toJson(enriched.decisionTrace)},
-        alternativeEndings = ${toJson(enriched.alternativeEndings)},
-        nextActions = ${toJson(enriched.nextActions)},
-        rawReport = ${toJson(enrichedReport)}
-      WHERE id = ${finaleId}
+    const archiveId = randomUUID();
+    await getDb().$executeRaw`
+      INSERT INTO OrganizationArchive (
+        id, organizationProfileId, name, stage, industry, product, market,
+        cashflow, revenue, teamSize, governanceStructure, keyRisks, finalOutcome, finalScore, simulationEndedAt
+      )
+      VALUES (
+        ${archiveId}, ${orgProfile.id}, ${orgProfile.name}, ${orgProfile.stage}, ${orgProfile.industry},
+        ${orgProfile.product}, ${orgProfile.market}, ${orgProfile.cashflow}, ${orgProfile.revenue},
+        ${orgProfile.teamSize}, ${orgProfile.governanceStructure}, ${orgProfile.keyRisks},
+        ${finale.outcomeType}, ${Math.round(finale.score)}, CURRENT_TIMESTAMP
+      )
     `;
-  } catch (err) {
-    // Silently fail - the fallback is already saved and visible to the user
-    console.warn("[finale] LLM enrichment failed, keeping fallback:", err instanceof Error ? err.message : String(err));
+  } catch (error) {
+    console.warn("[finale] Failed to archive organization:", error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -239,23 +237,36 @@ export async function PATCH(request: Request) {
     const { id, title, summary, keyDrivers, decisionTrace, alternativeEndings, nextActions } = body;
     if (!id) return NextResponse.json({ error: "缺少 id" }, { status: 400 });
 
-    const editableFields: string[] = [];
-    const values: string[] = [];
-    if (title !== undefined) { editableFields.push("title"); values.push(title); }
-    if (summary !== undefined) { editableFields.push("summary"); values.push(summary); }
-    if (keyDrivers !== undefined) { editableFields.push("keyDrivers"); values.push(JSON.stringify(keyDrivers)); }
-    if (decisionTrace !== undefined) { editableFields.push("decisionTrace"); values.push(JSON.stringify(decisionTrace)); }
-    if (alternativeEndings !== undefined) { editableFields.push("alternativeEndings"); values.push(JSON.stringify(alternativeEndings)); }
-    if (nextActions !== undefined) { editableFields.push("nextActions"); values.push(JSON.stringify(nextActions)); }
+    const existing = await getDb().$queryRaw<FinaleRow[]>`
+      SELECT * FROM SimulationFinale WHERE id = ${id} LIMIT 1
+    `;
+    const current = existing[0];
+    if (!current) return NextResponse.json({ error: "未找到结局报告" }, { status: 404 });
 
-    if (editableFields.length === 0) return NextResponse.json({ error: "没有可更新字段" }, { status: 400 });
+    const updated = {
+      title: title ?? current.title,
+      summary: summary ?? current.summary,
+      keyDrivers: keyDrivers ?? parseStringArray(current.keyDrivers),
+      decisionTrace: decisionTrace ?? parseStringArray(current.decisionTrace),
+      alternativeEndings: alternativeEndings ?? parseStringArray(current.alternativeEndings),
+      nextActions: nextActions ?? parseStringArray(current.nextActions),
+    };
 
-    const setClause = editableFields.map((f) => `${f} = ?`).join(", ");
-    await getDb().$executeRaw`UPDATE SimulationFinale SET ${setClause} WHERE id = ${id}`;
+    await getDb().$executeRaw`
+      UPDATE SimulationFinale
+      SET
+        title = ${updated.title},
+        summary = ${updated.summary},
+        keyDrivers = ${toJson(updated.keyDrivers)},
+        decisionTrace = ${toJson(updated.decisionTrace)},
+        alternativeEndings = ${toJson(updated.alternativeEndings)},
+        nextActions = ${toJson(updated.nextActions)}
+      WHERE id = ${id}
+    `;
 
     return NextResponse.json({ success: true });
   } catch {
-    return NextResponse.json({ error: "更新失败" }, { status: 500 });
+    return NextResponse.json({ error: "保存结局报告失败" }, { status: 500 });
   }
 }
 
@@ -287,6 +298,11 @@ function serializeFinale(row: FinaleRow) {
   };
 }
 
+function isLlmGenerated(row: FinaleRow) {
+  const rawReport = safeJsonParse(row.rawReport) as { generatedBy?: string };
+  return rawReport.generatedBy === "llm";
+}
+
 function parseStringArray(value: string) {
   try {
     const parsed = JSON.parse(value);
@@ -297,5 +313,9 @@ function parseStringArray(value: string) {
 }
 
 function safeJsonParse(value: string) {
-  try { return JSON.parse(value); } catch { return {}; }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
 }
