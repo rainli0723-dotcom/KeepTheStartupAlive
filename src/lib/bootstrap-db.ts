@@ -4,6 +4,10 @@ let initialized = false;
 
 export async function ensureDatabase() {
   if (initialized) return;
+  if (isPostgresUrl(process.env.DATABASE_URL)) {
+    initialized = true;
+    return;
+  }
   const db = getDb();
   await db.$executeRawUnsafe(`PRAGMA foreign_keys = ON`);
   await db.$executeRawUnsafe(`
@@ -15,9 +19,9 @@ export async function ensureDatabase() {
       product TEXT NOT NULL,
       market TEXT NOT NULL,
       cashflow INTEGER NOT NULL DEFAULT 60,
-      revenue TEXT NOT NULL DEFAULT '尚未填写',
+      revenue TEXT NOT NULL DEFAULT 'not_set',
       teamSize INTEGER NOT NULL DEFAULT 1,
-      governanceStructure TEXT NOT NULL DEFAULT '创始人负责制',
+      governanceStructure TEXT NOT NULL DEFAULT 'founder_led',
       keyRisks TEXT NOT NULL DEFAULT '[]',
       createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt DATETIME NOT NULL
@@ -268,4 +272,8 @@ async function ensureColumn(tableName: string, columnName: string, columnDefinit
   if (!columns.some((column) => column.name === columnName)) {
     await db.$executeRawUnsafe(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
   }
+}
+
+function isPostgresUrl(value?: string) {
+  return Boolean(value?.startsWith("postgres://") || value?.startsWith("postgresql://"));
 }

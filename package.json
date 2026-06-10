@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "prisma:generate": "prisma generate",
+    "prisma:generate:prod": "prisma generate --schema prisma-postgres/schema.prisma",
     "db:push": "prisma db push",
+    "db:prod:migrate": "prisma migrate deploy --schema prisma-postgres/schema.prisma",
+    "db:prod:status": "prisma migrate status --schema prisma-postgres/schema.prisma",
     "test": "vitest run",
     "test:watch": "vitest"
   },
