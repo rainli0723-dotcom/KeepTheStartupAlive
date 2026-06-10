@@ -1,12 +1,16 @@
 import { randomUUID } from "node:crypto";
+import { getCurrentAuth } from "./auth";
 import { getDb } from "./db";
 import { toJson } from "./serializers";
 
-const defaultTenantName = "默认企业";
+const defaultTenantName = "演示企业空间";
 
 export async function ensureDefaultTenant() {
   const db = getDb();
-  const existing = await db.enterpriseTenant.findFirst({ orderBy: { createdAt: "asc" } });
+  const existing = await db.enterpriseTenant.findFirst({
+    where: { name: defaultTenantName },
+    orderBy: { createdAt: "asc" },
+  });
   if (existing) return existing;
 
   const tenant = await db.enterpriseTenant.create({
@@ -18,7 +22,7 @@ export async function ensureDefaultTenant() {
       members: {
         create: {
           id: randomUUID(),
-          name: "管理员",
+          name: "演示管理员",
           role: "admin",
         },
       },
@@ -37,6 +41,9 @@ export async function ensureDefaultTenant() {
 }
 
 export async function getActiveTenant() {
+  const auth = await getCurrentAuth();
+  if (auth) return auth.tenant;
+
   const tenant = await ensureDefaultTenant();
   const result = await getDb().simulationWorkspace.updateMany({
     where: { tenantId: null },

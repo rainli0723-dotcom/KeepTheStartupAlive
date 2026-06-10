@@ -79,7 +79,7 @@ export default async function DistillPage({ params }: { params: Promise<{ id: st
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {parseTypicalPhrases(member.distillationProfile.typicalPhrases).map((phrase, idx) => (
                       <span key={idx} className="rounded-full border border-[var(--line)] bg-white/[0.06] px-2.5 py-0.5 text-xs text-cyan-200">
-                        "{phrase}"
+                        “{phrase}”
                       </span>
                     ))}
                   </div>

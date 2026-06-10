@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useCallback, memo } from "react";
+import { useCallback, useEffect, useState, memo } from "react";
 import {
   BriefcaseBusiness,
+  Building2,
   FileText,
   GitBranch,
-  Building2,
   LibraryBig,
   PlayCircle,
   ShieldCheck,
@@ -16,14 +16,14 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { href: "/enterprise", label: "企业管理", icon: Building2 },
+  { href: "/enterprise", label: "企业空间", icon: Building2 },
   { href: "/workspaces", label: "沙盘工作区", icon: SquareStack },
   { href: "/simulation/start", label: "开始模拟", icon: PlayCircle },
-  { href: "/organization", label: "组织档案", icon: BriefcaseBusiness },
+  { href: "/organization", label: "公司画像", icon: BriefcaseBusiness },
   { href: "/roles", label: "角色库", icon: LibraryBig },
-  { href: "/team", label: "数字孪生", icon: UsersRound },
-  { href: "/scenarios", label: "场景库", icon: GitBranch },
-  { href: "/reports", label: "复盘报告", icon: FileText },
+  { href: "/team", label: "数字孪生角色", icon: UsersRound },
+  { href: "/scenarios", label: "行业模板", icon: GitBranch },
+  { href: "/reports", label: "报告中心", icon: FileText },
   { href: "/security", label: "安全说明", icon: ShieldCheck },
 ];
 
@@ -35,7 +35,7 @@ const NavItem = memo(function NavItem({
   onPointerEnter,
   onClick,
 }: {
-  item: typeof navItems[0];
+  item: (typeof navItems)[0];
   active: boolean;
   pressed: boolean;
   onMouseDown: () => void;
@@ -66,14 +66,12 @@ export function SidebarNav() {
   const router = useRouter();
   const [optimisticHref, setOptimisticHref] = useState("");
 
-  // Prefetch all nav items once on mount
   useEffect(() => {
     navItems.forEach((item) => {
       router.prefetch(item.href);
     });
   }, [router]);
 
-  // Clean up optimistic state after navigation
   useEffect(() => {
     if (!optimisticHref) return;
     if (optimisticHref === pathname) {
@@ -86,12 +84,14 @@ export function SidebarNav() {
     setOptimisticHref(href);
   }, []);
 
-  const handlePointerEnter = useCallback((href: string) => {
-    // Only prefetch if not already at this href
-    if (pathname !== href) {
-      router.prefetch(href);
-    }
-  }, [router, pathname]);
+  const handlePointerEnter = useCallback(
+    (href: string) => {
+      if (pathname !== href) {
+        router.prefetch(href);
+      }
+    },
+    [router, pathname],
+  );
 
   return (
     <nav className="space-y-2 p-3">

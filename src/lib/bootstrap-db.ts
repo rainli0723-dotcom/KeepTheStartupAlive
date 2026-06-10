@@ -37,12 +37,38 @@ export async function ensureDatabase() {
     CREATE TABLE IF NOT EXISTS TenantMember (
       id TEXT PRIMARY KEY NOT NULL,
       tenantId TEXT NOT NULL,
+      userId TEXT,
       name TEXT NOT NULL,
       email TEXT,
       role TEXT NOT NULL DEFAULT 'admin',
       createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt DATETIME NOT NULL,
       CONSTRAINT TenantMember_tenantId_fkey FOREIGN KEY (tenantId) REFERENCES EnterpriseTenant (id) ON DELETE CASCADE ON UPDATE CASCADE
+    )
+  `);
+  await ensureColumn("TenantMember", "userId", "TEXT");
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS AppUser (
+      id TEXT PRIMARY KEY NOT NULL,
+      tenantId TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      passwordHash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'admin',
+      status TEXT NOT NULL DEFAULT 'active',
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt DATETIME NOT NULL,
+      CONSTRAINT AppUser_tenantId_fkey FOREIGN KEY (tenantId) REFERENCES EnterpriseTenant (id) ON DELETE CASCADE ON UPDATE CASCADE
+    )
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS AuthSession (
+      id TEXT PRIMARY KEY NOT NULL,
+      userId TEXT NOT NULL,
+      tokenHash TEXT NOT NULL UNIQUE,
+      expiresAt DATETIME NOT NULL,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT AuthSession_userId_fkey FOREIGN KEY (userId) REFERENCES AppUser (id) ON DELETE CASCADE ON UPDATE CASCADE
     )
   `);
   await db.$executeRawUnsafe(`

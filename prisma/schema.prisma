@@ -94,11 +94,13 @@ model EnterpriseTenant {
   workspaces  SimulationWorkspace[]
   members     TenantMember[]
   auditLogs   AuditLog[]
+  users       AppUser[]
 }
 
 model TenantMember {
   id        String   @id @default(cuid())
   tenantId  String
+  userId    String?
   name      String
   email     String?
   role      String   @default("admin")
@@ -106,6 +108,33 @@ model TenantMember {
   updatedAt DateTime @updatedAt
 
   tenant    EnterpriseTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      AppUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model AppUser {
+  id           String   @id @default(cuid())
+  tenantId     String
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("admin")
+  status       String   @default("active")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       EnterpriseTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships  TenantMember[]
+  sessions     AuthSession[]
+}
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AuditLog {
