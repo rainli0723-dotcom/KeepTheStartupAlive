@@ -95,6 +95,8 @@ model EnterpriseTenant {
   members     TenantMember[]
   auditLogs   AuditLog[]
   users       AppUser[]
+  llmCallLogs LlmCallLog[]
+  llmJobs     LlmJob[]
 }
 
 model TenantMember {
@@ -148,6 +150,43 @@ model AuditLog {
   createdAt   DateTime @default(now())
 
   tenant      EnterpriseTenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+}
+
+model LlmCallLog {
+  id              String   @id @default(cuid())
+  tenantId        String?
+  task            String   @default("structured_call")
+  provider        String
+  model           String
+  status          String
+  attemptCount    Int      @default(1)
+  durationMs      Int      @default(0)
+  promptTokens    Int?
+  completionTokens Int?
+  totalTokens     Int?
+  errorMessage    String?
+  requestHash     String
+  createdAt       DateTime @default(now())
+
+  tenant          EnterpriseTenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+}
+
+model LlmJob {
+  id           String   @id @default(cuid())
+  tenantId     String?
+  task         String
+  status       String   @default("queued")
+  attempts     Int      @default(0)
+  maxAttempts  Int      @default(3)
+  payload      String
+  result       String?
+  errorMessage String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  tenant       EnterpriseTenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 }
 
 model SimulationFinale {

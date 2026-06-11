@@ -1,5 +1,7 @@
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { Agent, buildConnector, fetch as undiciFetch, ProxyAgent, type Dispatcher } from "undici";
+import { getDb } from "./db";
 
 type LlmMessage = {
   role: "system" | "user" | "assistant";
@@ -21,11 +23,20 @@ export async function callStructuredLlm<T>(input: {
   schema: z.ZodType<T>;
   fallback?: T;
   timeoutMs?: number;
+  task?: string;
+  tenantId?: string | null;
+  maxRetries?: number;
 }) {
   input.messages.forEach((message) => llmMessageSchema.parse(message));
   const apiKey = process.env.LLM_API_KEY;
   const baseUrl = process.env.LLM_BASE_URL ?? "https://api.openai.com/v1";
   const model = process.env.LLM_MODEL ?? "gpt-4.1-mini";
+  const task = input.task ?? "structured_call";
+  const startedAt = Date.now();
+  const maxRetries = input.maxRetries ?? Number(process.env.LLM_MAX_RETRIES ?? 2);
+  const requestHash = createHash("sha256")
+    .update(JSON.stringify({ task, model, messages: input.messages }))
+    .digest("hex");
 
   if (!apiKey) {
     if (input.fallback) return input.fallback;
@@ -34,6 +45,64 @@ export async function callStructuredLlm<T>(input: {
 
   const requestUrl = `${baseUrl.replace(/\/$/, "")}/chat/completions`;
   const timeoutDuration = input.timeoutMs ?? llmTimeoutMs;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    try {
+      const { result, usage } = await executeStructuredLlmRequest({
+        messages: input.messages,
+        schema: input.schema,
+        requestUrl,
+        timeoutDuration,
+        baseUrl,
+        model,
+        apiKey,
+      });
+      await writeLlmCallLog({
+        tenantId: input.tenantId,
+        task,
+        provider: new URL(baseUrl).hostname,
+        model,
+        status: "success",
+        attemptCount: attempt,
+        durationMs: Date.now() - startedAt,
+        requestHash,
+        usage,
+      });
+      return result;
+    } catch (error) {
+      lastError = error;
+      if (attempt <= maxRetries) {
+        await delay(Math.min(3000, 250 * 2 ** (attempt - 1)));
+      }
+    }
+  }
+
+  const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
+  await writeLlmCallLog({
+    tenantId: input.tenantId,
+    task,
+    provider: new URL(baseUrl).hostname,
+    model,
+    status: "failed",
+    attemptCount: maxRetries + 1,
+    durationMs: Date.now() - startedAt,
+    requestHash,
+    errorMessage,
+  });
+  throw lastError instanceof Error ? lastError : new Error(errorMessage);
+}
+
+async function executeStructuredLlmRequest<T>(input: {
+  messages: LlmMessage[];
+  schema: z.ZodType<T>;
+  requestUrl: string;
+  timeoutDuration: number;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+}) {
+  const { messages, schema, requestUrl, timeoutDuration, baseUrl, model, apiKey } = input;
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), timeoutDuration);
 
@@ -49,7 +118,7 @@ export async function callStructuredLlm<T>(input: {
         content:
           "You are KTSA, a To B business simulation sandbox analyst. Your response MUST be a valid JSON object. Do not include any explanation, markdown formatting, or text outside the JSON. The JSON must exactly match the required schema.",
       },
-      ...input.messages,
+      ...messages,
     ],
   });
   let response;
@@ -87,14 +156,53 @@ export async function callStructuredLlm<T>(input: {
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
-        return input.schema.parse(JSON.parse(jsonMatch[0]));
+        return { result: schema.parse(JSON.parse(jsonMatch[0])), usage: payload.usage };
       } catch {
         // If parsing fails, continue with original content
       }
     }
   }
 
-  return input.schema.parse(JSON.parse(content));
+  return { result: schema.parse(JSON.parse(content)), usage: payload.usage };
+}
+
+async function writeLlmCallLog(input: {
+  tenantId?: string | null;
+  task: string;
+  provider: string;
+  model: string;
+  status: string;
+  attemptCount: number;
+  durationMs: number;
+  requestHash: string;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+  errorMessage?: string;
+}) {
+  try {
+    await getDb().llmCallLog.create({
+      data: {
+        id: randomUUID(),
+        tenantId: input.tenantId ?? null,
+        task: input.task,
+        provider: input.provider,
+        model: input.model,
+        status: input.status,
+        attemptCount: input.attemptCount,
+        durationMs: input.durationMs,
+        requestHash: input.requestHash,
+        promptTokens: input.usage?.prompt_tokens,
+        completionTokens: input.usage?.completion_tokens,
+        totalTokens: input.usage?.total_tokens,
+        errorMessage: input.errorMessage ? input.errorMessage.slice(0, 2000) : null,
+      },
+    });
+  } catch (error) {
+    console.warn("[llm] failed to write call log:", error instanceof Error ? error.message : String(error));
+  }
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function formatNetworkError(error: unknown, requestUrl: string, timeoutDuration: number) {
