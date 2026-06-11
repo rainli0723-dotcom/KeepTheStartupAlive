@@ -68,6 +68,8 @@ LLM_TIMEOUT_MS="60000"
 npm run db:push
 ```
 
+本地开发使用 SQLite。应用启动后会自动补齐必要表结构、演示企业空间、角色模板和当前工作区缺失的默认数字孪生角色；如果页面出现空数据，先访问 `/api/health` 查看数据库和角色模板状态。
+
 4. **启动开发服务器**
 ```bash
 npm run dev
@@ -83,7 +85,11 @@ npm run build
 npm start
 ```
 
+正式 To B 部署不要使用 `prisma/dev.db`。生产环境必须使用 PostgreSQL、独立 `.env.production`、生产 LLM Key、备份恢复策略和迁移流程。详细步骤见 [docs/production-postgres.md](docs/production-postgres.md)。
+
 ## 配置说明
+
+完整配置、操作、排查和交付检查见 [docs/configuration-operation-guide.md](docs/configuration-operation-guide.md)。
 
 ### 环境变量（`.env`）
 
@@ -96,6 +102,16 @@ npm start
 | `LLM_TIMEOUT_MS` | API 超时时间（毫秒） | `60000` |
 | `LLM_PROXY_URL` | （可选）代理地址 | `http://127.0.0.1:7897` |
 | `LLM_RESOLVE_IP` | （可选）DNS 解析 | `api.deepseek.com=3.173.21.63` |
+
+### 健康检查
+
+访问：
+
+```text
+/api/health
+```
+
+健康检查会返回数据库连接、数据库类型、角色模板同步数量、工作区数量、LLM 是否配置和当前模型。正式部署时应把该接口加入部署后的 smoke test。
 
 ### 支持的 LLM API
 

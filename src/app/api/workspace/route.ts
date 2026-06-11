@@ -3,8 +3,8 @@ import { z } from "zod";
 import { canEdit } from "@/lib/access-control";
 import { getCurrentAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { defaultOrganizationState, roleTemplates } from "@/lib/domain";
-import { ensureRoleTemplates } from "@/lib/seed";
+import { defaultOrganizationState } from "@/lib/domain";
+import { ensureWorkspaceRoleTemplates } from "@/lib/seed";
 import { parseState, toJson } from "@/lib/serializers";
 import { serializeLockedMemberIds } from "@/lib/simulation-run";
 import { getActiveTenant, writeAuditLog } from "@/lib/tenant";
@@ -20,8 +20,6 @@ const workspacePatchSchema = z.object({
 });
 
 async function createStarterWorkspace(tenantId: string) {
-  await ensureRoleTemplates();
-
   const db = getDb();
   const organization = await db.organizationProfile.create({
     data: {
@@ -53,19 +51,7 @@ async function createStarterWorkspace(tenantId: string) {
     },
   });
 
-  await db.teamMember.createMany({
-    data: roleTemplates.map((roleTemplate) => ({
-      workspaceId: workspace.id,
-      name: roleTemplate.name,
-      roleName: roleTemplate.name,
-      isRealMember: false,
-      capabilities: toJson(roleTemplate.defaultCapabilities),
-      customMetrics: toJson(roleTemplate.defaultMetrics),
-      personality: roleTemplate.description,
-      communicationStyle: "简洁、直接、先给判断再说明依据",
-      decisionPreference: "优先选择能在 30 天内验证、且不显著透支现金流的方案",
-    })),
-  });
+  await ensureWorkspaceRoleTemplates(workspace.id);
 
   await writeAuditLog({
     tenantId,
