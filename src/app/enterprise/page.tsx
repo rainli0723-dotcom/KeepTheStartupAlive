@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppShell, PageHeader, Panel } from "@/components/app-shell";
+import { EnterpriseDangerZone } from "@/components/enterprise-danger-zone";
 import { TenantMemberForm } from "@/components/tenant-member-form";
 import { getCurrentAuth } from "@/lib/auth";
 import { parseJson } from "@/lib/domain";
@@ -166,6 +167,20 @@ export default async function EnterprisePage() {
               </div>
             </Panel>
           </div>
+
+          {auth?.user.role === "admin" ? (
+            <Panel className="border-rose-300/20 p-5">
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Danger Zone</h2>
+                  <p className="mt-1 text-sm text-[var(--muted)]">
+                    Delete enterprise business data while keeping the enterprise account and audit trail.
+                  </p>
+                </div>
+                <EnterpriseDangerZone />
+              </div>
+            </Panel>
+          ) : null}
         </div>
       ) : null}
     </AppShell>

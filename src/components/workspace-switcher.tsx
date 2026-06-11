@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2, Trash2 } from "lucide-react";
 
 type WorkspaceItem = {
   id: string;
@@ -34,9 +34,18 @@ export function WorkspaceSwitcher({ workspaces }: { workspaces: WorkspaceItem[] 
     });
 
     setPendingId("");
-    if (response.ok) {
-      router.refresh();
-    }
+    if (response.ok) router.refresh();
+  }
+
+  async function remove(workspaceId: string, name: string) {
+    if (!confirm(`Delete workspace "${name}"? This cannot be undone.`)) return;
+    setPendingId(workspaceId);
+    const response = await fetch(`/api/workspaces?workspaceId=${encodeURIComponent(workspaceId)}`, {
+      method: "DELETE",
+    });
+
+    setPendingId("");
+    if (response.ok) router.refresh();
   }
 
   return (
@@ -50,7 +59,7 @@ export function WorkspaceSwitcher({ workspaces }: { workspaces: WorkspaceItem[] 
                 {workspace.isActive ? (
                   <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/35 bg-emerald-300/10 px-2 py-0.5 text-xs text-emerald-100">
                     <CheckCircle2 size={12} />
-                    当前
+                    Active
                   </span>
                 ) : null}
                 <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-slate-300">
@@ -62,22 +71,33 @@ export function WorkspaceSwitcher({ workspaces }: { workspaces: WorkspaceItem[] 
                 {workspace.industry} · {workspace.product}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => activate(workspace.id)}
-              disabled={workspace.isActive || pendingId === workspace.id}
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/16 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {pendingId === workspace.id ? <Loader2 className="animate-spin" size={16} /> : null}
-              {workspace.isActive ? "已设为当前" : "切换到此沙盘"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => activate(workspace.id)}
+                disabled={workspace.isActive || pendingId === workspace.id}
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/16 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {pendingId === workspace.id ? <Loader2 className="animate-spin" size={16} /> : null}
+                {workspace.isActive ? "Current" : "Switch"}
+              </button>
+              <button
+                type="button"
+                onClick={() => remove(workspace.id, workspace.name)}
+                disabled={pendingId === workspace.id}
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-rose-300/25 bg-rose-300/10 px-4 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-300/16 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash2 size={16} />
+                Delete
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-4">
-            <Metric label="当前轮次" value={`${Math.max(0, workspace.currentCycle - 1)}/20`} />
-            <Metric label="角色数" value={String(workspace.counts.teamMembers)} />
-            <Metric label="会议数" value={String(workspace.counts.meetings)} />
-            <Metric label="最近更新" value={new Date(workspace.updatedAt).toLocaleDateString("zh-CN")} />
+            <Metric label="Cycles" value={`${Math.max(0, workspace.currentCycle - 1)}/20`} />
+            <Metric label="Roles" value={String(workspace.counts.teamMembers)} />
+            <Metric label="Meetings" value={String(workspace.counts.meetings)} />
+            <Metric label="Updated" value={new Date(workspace.updatedAt).toLocaleDateString("zh-CN")} />
           </div>
         </section>
       ))}

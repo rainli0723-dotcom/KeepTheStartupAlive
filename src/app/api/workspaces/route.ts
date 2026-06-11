@@ -66,3 +66,27 @@ export async function PATCH(request: Request) {
 
   return NextResponse.json({ workspace });
 }
+
+export async function DELETE(request: Request) {
+  const workspaceId = new URL(request.url).searchParams.get("workspaceId");
+  if (!workspaceId) return NextResponse.json({ error: "Missing workspaceId" }, { status: 400 });
+
+  const tenant = await getActiveTenant();
+  const workspace = await getDb().simulationWorkspace.findFirst({
+    where: { id: workspaceId, tenantId: tenant.id },
+  });
+  if (!workspace) {
+    return NextResponse.json({ error: "Workspace not found in current tenant" }, { status: 404 });
+  }
+
+  await getDb().simulationWorkspace.delete({ where: { id: workspace.id } });
+  await writeAuditLog({
+    tenantId: tenant.id,
+    action: "workspace.deleted",
+    entityType: "SimulationWorkspace",
+    entityId: workspace.id,
+    metadata: { name: workspace.name },
+  });
+
+  return NextResponse.json({ success: true });
+}
