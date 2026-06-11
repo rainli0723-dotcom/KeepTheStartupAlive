@@ -50,8 +50,8 @@ export function AppShellClient({ children, auth }: { children: React.ReactNode; 
 
   return (
     <div className="app-canvas min-h-screen text-[var(--foreground)]">
-      <aside className="glass-sidebar fixed inset-y-0 left-0 hidden w-72 lg:block">
-        <div className="relative border-b border-[var(--line)] px-6 py-6">
+      <aside className="glass-sidebar fixed inset-y-0 left-0 hidden w-72 flex-col lg:flex">
+        <div className="relative shrink-0 border-b border-[var(--line)] px-6 py-6">
           <div className="cyber-corner cyber-corner-top" />
           <div className="flex items-center gap-3">
             <div className="brand-chip grid size-11 place-items-center">
@@ -59,13 +59,15 @@ export function AppShellClient({ children, auth }: { children: React.ReactNode; 
             </div>
             <div>
               <div className="text-sm font-semibold tracking-[0.18em] text-white">KTSA</div>
-              <div className="text-xs text-[var(--muted)]">AI BUSINESS SANDBOX</div>
+              <div className="text-xs text-[var(--muted)]">AI 创业经营沙盘</div>
             </div>
           </div>
         </div>
-        <div className="pb-44">
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4 [scrollbar-width:thin]">
           <SidebarNav />
         </div>
+
         <AccountPanel auth={currentAuth} />
       </aside>
       <main className="lg:pl-72">
@@ -85,7 +87,7 @@ function AccountPanel({ auth }: { auth: ShellAuth }) {
   }
 
   return (
-    <div className="absolute inset-x-0 bottom-0 border-t border-[var(--line)] bg-black/10 p-4 backdrop-blur">
+    <div className="shrink-0 border-t border-[var(--line)] bg-black/10 p-4 backdrop-blur">
       {auth ? (
         <div className="rounded-md border border-white/10 bg-white/[0.04] p-3">
           <div className="flex items-start gap-2">
@@ -94,7 +96,7 @@ function AccountPanel({ auth }: { auth: ShellAuth }) {
               <div className="truncate text-sm font-semibold text-white">{auth.tenant.name}</div>
               <div className="truncate text-xs text-[var(--muted)]">{auth.user.email}</div>
               <div className="mt-1 text-xs text-cyan-100">
-                {auth.user.role} · {auth.tenant.plan}
+                {formatRole(auth.user.role)} · {formatPlan(auth.tenant.plan)}
               </div>
             </div>
           </div>
@@ -133,7 +135,7 @@ export function PageHeader({
     <header className="cyber-header mb-6 flex flex-col justify-between gap-4 p-5 md:flex-row md:items-end">
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent)]">
-          KTSA OPERATING SANDBOX
+          KTSA 经营沙盘
         </p>
         <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">{title}</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">{description}</p>
@@ -175,4 +177,16 @@ export function EmptyState({ title, description }: { title: string; description:
       <p className="mt-2 text-sm text-[var(--muted)]">{description}</p>
     </div>
   );
+}
+
+function formatRole(role: string) {
+  if (role === "admin") return "管理员";
+  if (role === "editor") return "编辑者";
+  return "只读成员";
+}
+
+function formatPlan(plan: string) {
+  if (plan === "trial") return "试用版";
+  if (plan === "business") return "商业版";
+  return plan;
 }

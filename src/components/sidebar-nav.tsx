@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, memo } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import {
   BriefcaseBusiness,
   Building2,
@@ -17,14 +17,14 @@ import {
 
 const navItems = [
   { href: "/enterprise", label: "企业空间", icon: Building2 },
-  { href: "/workspaces", label: "沙盘工作区", icon: SquareStack },
+  { href: "/workspaces", label: "工作区管理", icon: SquareStack },
   { href: "/simulation/start", label: "开始模拟", icon: PlayCircle },
-  { href: "/organization", label: "公司画像", icon: BriefcaseBusiness },
+  { href: "/organization", label: "公司资料", icon: BriefcaseBusiness },
   { href: "/roles", label: "角色库", icon: LibraryBig },
-  { href: "/team", label: "数字孪生角色", icon: UsersRound },
-  { href: "/scenarios", label: "行业模板", icon: GitBranch },
-  { href: "/reports", label: "报告中心", icon: FileText },
-  { href: "/security", label: "安全说明", icon: ShieldCheck },
+  { href: "/team", label: "数字孪生", icon: UsersRound },
+  { href: "/scenarios", label: "专项场景", icon: GitBranch },
+  { href: "/reports", label: "复盘报告", icon: FileText },
+  { href: "/security", label: "安全与合规", icon: ShieldCheck },
 ];
 
 const NavItem = memo(function NavItem({
@@ -47,16 +47,14 @@ const NavItem = memo(function NavItem({
     <Link
       href={item.href}
       prefetch
-      className={`glass-nav-link ${active ? "glass-nav-link-active" : ""} ${
-        pressed ? "glass-nav-link-pressed" : ""
-      }`}
+      className={`glass-nav-link ${active ? "glass-nav-link-active" : ""} ${pressed ? "glass-nav-link-pressed" : ""}`}
       onMouseDown={onMouseDown}
       onPointerEnter={onPointerEnter}
       onClick={onClick}
     >
       <Icon size={17} />
       <span>{item.label}</span>
-      {active ? <span className="nav-active-badge">ACTIVE</span> : null}
+      {active ? <span className="nav-active-badge">当前</span> : null}
     </Link>
   );
 });
@@ -67,9 +65,7 @@ export function SidebarNav() {
   const [optimisticHref, setOptimisticHref] = useState("");
 
   useEffect(() => {
-    navItems.forEach((item) => {
-      router.prefetch(item.href);
-    });
+    navItems.forEach((item) => router.prefetch(item.href));
   }, [router]);
 
   useEffect(() => {
@@ -86,9 +82,7 @@ export function SidebarNav() {
 
   const handlePointerEnter = useCallback(
     (href: string) => {
-      if (pathname !== href) {
-        router.prefetch(href);
-      }
+      if (pathname !== href) router.prefetch(href);
     },
     [router, pathname],
   );

@@ -93,10 +93,13 @@ model EnterpriseTenant {
 
   workspaces  SimulationWorkspace[]
   members     TenantMember[]
+  invitations TenantInvitation[]
   auditLogs   AuditLog[]
   users       AppUser[]
   llmCallLogs LlmCallLog[]
   llmJobs     LlmJob[]
+  promptVersions PromptVersion[]
+  reportShareLinks ReportShareLink[]
 }
 
 model TenantMember {
@@ -111,6 +114,22 @@ model TenantMember {
 
   tenant    EnterpriseTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user      AppUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model TenantInvitation {
+  id          String   @id @default(cuid())
+  tenantId    String
+  email       String
+  role        String   @default("viewer")
+  tokenHash   String   @unique
+  status      String   @default("pending")
+  invitedBy   String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      EnterpriseTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
 model AppUser {
@@ -164,11 +183,15 @@ model LlmCallLog {
   promptTokens    Int?
   completionTokens Int?
   totalTokens     Int?
+  estimatedCostUsd Float?
+  promptVersionId String?
+  modelConfig     String   @default("{}")
   errorMessage    String?
   requestHash     String
   createdAt       DateTime @default(now())
 
   tenant          EnterpriseTenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  promptVersion   PromptVersion? @relation(fields: [promptVersionId], references: [id], onDelete: SetNull)
 }
 
 model LlmJob {
@@ -178,6 +201,8 @@ model LlmJob {
   status       String   @default("queued")
   attempts     Int      @default(0)
   maxAttempts  Int      @default(3)
+  timeoutMs    Int      @default(60000)
+  runAfter     DateTime @default(now())
   payload      String
   result       String?
   errorMessage String?
@@ -187,6 +212,24 @@ model LlmJob {
   completedAt  DateTime?
 
   tenant       EnterpriseTenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+}
+
+model PromptVersion {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  task        String
+  version     String
+  systemPrompt String
+  outputSchema String
+  status      String   @default("active")
+  createdBy   String   @default("system")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      EnterpriseTenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  llmCallLogs LlmCallLog[]
+
+  @@unique([tenantId, task, version])
 }
 
 model SimulationFinale {
@@ -205,6 +248,23 @@ model SimulationFinale {
   createdAt      DateTime @default(now())
 
   workspace      SimulationWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  shareLinks     ReportShareLink[]
+}
+
+model ReportShareLink {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  finaleId    String
+  tokenHash   String   @unique
+  title       String
+  status      String   @default("active")
+  expiresAt   DateTime?
+  createdBy   String   @default("system")
+  createdAt   DateTime @default(now())
+  revokedAt   DateTime?
+
+  tenant      EnterpriseTenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  finale      SimulationFinale @relation(fields: [finaleId], references: [id], onDelete: Cascade)
 }
 
 model RoleTemplate {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { LogIn, UserPlus } from "lucide-react";
 
@@ -9,6 +9,8 @@ type AuthMode = "login" | "register";
 
 export function AuthForm({ mode }: { mode: AuthMode }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get("invite");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -16,8 +18,14 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     setLoading(true);
     setError("");
 
-    const payload =
-      mode === "register"
+    const isInviteRegistration = mode === "register" && inviteToken;
+    const payload = isInviteRegistration
+      ? {
+          token: inviteToken,
+          name: String(formData.get("name") ?? ""),
+          password: String(formData.get("password") ?? ""),
+        }
+      : mode === "register"
         ? {
             name: String(formData.get("name") ?? ""),
             email: String(formData.get("email") ?? ""),
@@ -29,7 +37,8 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             password: String(formData.get("password") ?? ""),
           };
 
-    const response = await fetch(`/api/auth/${mode}`, {
+    const endpoint = isInviteRegistration ? "/api/enterprise/invitations/accept" : `/api/auth/${mode}`;
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -38,7 +47,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     setLoading(false);
 
     if (!response.ok) {
-      setError(result.error ?? "请求失败，请重试");
+      setError(result.error ?? "操作失败，请检查输入后重试。");
       return;
     }
 
@@ -47,6 +56,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   }
 
   const isRegister = mode === "register";
+  const isInviteRegistration = isRegister && inviteToken;
 
   return (
     <form action={handleSubmit} className="glass-panel mx-auto w-full max-w-md p-6">
@@ -54,9 +64,15 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         <div className="mb-3 inline-flex size-10 items-center justify-center rounded-md border border-cyan-300/30 bg-cyan-300/10 text-cyan-100">
           {isRegister ? <UserPlus size={20} /> : <LogIn size={20} />}
         </div>
-        <h1 className="text-2xl font-semibold text-white">{isRegister ? "注册企业账号" : "登录 KTSA"}</h1>
+        <h1 className="text-2xl font-semibold text-white">
+          {isInviteRegistration ? "接受企业邀请" : isRegister ? "注册企业账号" : "登录 KTSA"}
+        </h1>
         <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-          {isRegister ? "创建企业空间后，沙盘、成员和审计记录会绑定到该企业。" : "登录后会进入你的企业空间。"}
+          {isInviteRegistration
+            ? "设置姓名和密码后，即可加入被邀请的企业空间。"
+            : isRegister
+              ? "创建企业空间、管理员账号和团队协作入口。"
+              : "登录后继续管理你的企业空间和模拟沙盘。"}
         </p>
       </div>
 
@@ -64,10 +80,10 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         {isRegister ? (
           <>
             <Field label="姓名" name="name" autoComplete="name" />
-            <Field label="企业名称" name="tenantName" autoComplete="organization" />
+            {!isInviteRegistration ? <Field label="企业名称" name="tenantName" autoComplete="organization" /> : null}
           </>
         ) : null}
-        <Field label="邮箱" name="email" type="email" autoComplete="email" />
+        {!isInviteRegistration ? <Field label="邮箱" name="email" type="email" autoComplete="email" /> : null}
         <Field label="密码" name="password" type="password" autoComplete={isRegister ? "new-password" : "current-password"} />
       </div>
 
@@ -79,30 +95,22 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-md bg-cyan-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isRegister ? <UserPlus size={17} /> : <LogIn size={17} />}
-        {loading ? "处理中..." : isRegister ? "创建企业空间" : "登录"}
+        {loading ? "处理中..." : isInviteRegistration ? "接受邀请" : isRegister ? "注册账号" : "登录"}
       </button>
 
-      <p className="mt-4 text-center text-sm text-[var(--muted)]">
-        {isRegister ? "已有账号？" : "还没有账号？"}
-        <Link className="ml-1 text-cyan-100 hover:text-white" href={isRegister ? "/login" : "/register"}>
-          {isRegister ? "去登录" : "注册企业账号"}
-        </Link>
-      </p>
+      {!isInviteRegistration ? (
+        <p className="mt-4 text-center text-sm text-[var(--muted)]">
+          {isRegister ? "已经有账号？" : "还没有企业账号？"}
+          <Link className="ml-1 text-cyan-100 hover:text-white" href={isRegister ? "/login" : "/register"}>
+            {isRegister ? "去登录" : "去注册"}
+          </Link>
+        </p>
+      ) : null}
     </form>
   );
 }
 
-function Field({
-  label,
-  name,
-  type = "text",
-  autoComplete,
-}: {
-  label: string;
-  name: string;
-  type?: string;
-  autoComplete?: string;
-}) {
+function Field({ label, name, type = "text", autoComplete }: { label: string; name: string; type?: string; autoComplete?: string }) {
   return (
     <label className="block">
       <span className="mb-2 block text-sm font-medium text-slate-200">{label}</span>

@@ -46,13 +46,13 @@ export function ScenariosList({ scenarios, selectedScenarioId: initialSelectedId
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this custom scenario?")) return;
+    if (!confirm("确定删除这个自定义场景吗？")) return;
     setDeleting(id);
     try {
       await fetch(`/api/scenarios?id=${id}`, { method: "DELETE" });
       router.refresh();
     } catch {
-      alert("Delete failed.");
+      alert("删除失败。");
     } finally {
       setDeleting(null);
     }
@@ -69,10 +69,10 @@ export function ScenariosList({ scenarios, selectedScenarioId: initialSelectedId
       if (response.ok) {
         setSelectedScenarioId(id);
       } else {
-        alert("Failed to select scenario.");
+        alert("选用场景失败。");
       }
     } catch {
-      alert("Failed to select scenario.");
+      alert("选用场景失败。");
     } finally {
       setSelecting(null);
     }
@@ -89,10 +89,10 @@ export function ScenariosList({ scenarios, selectedScenarioId: initialSelectedId
       if (response.ok) {
         setSelectedScenarioId(null);
       } else {
-        alert("Failed to clear scenario.");
+        alert("取消选用失败。");
       }
     } catch {
-      alert("Failed to clear scenario.");
+      alert("取消选用失败。");
     } finally {
       setSelecting(null);
     }
@@ -115,12 +115,12 @@ export function ScenariosList({ scenarios, selectedScenarioId: initialSelectedId
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-semibold text-white">{scenario.name}</h2>
                   {scenario.isDefault ? (
-                    <span className="rounded-full border border-cyan-300/30 bg-cyan-300/15 px-2 py-0.5 text-xs text-cyan-200">Default</span>
+                    <span className="rounded-full border border-cyan-300/30 bg-cyan-300/15 px-2 py-0.5 text-xs text-cyan-200">默认</span>
                   ) : null}
                   {isSelected ? (
                     <span className="flex items-center gap-1 rounded-full border border-emerald-300/30 bg-emerald-300/15 px-2 py-0.5 text-xs text-emerald-200">
                       <CheckCircle2 size={12} />
-                      Active
+                      已选用
                     </span>
                   ) : null}
                 </div>
@@ -138,7 +138,7 @@ export function ScenariosList({ scenarios, selectedScenarioId: initialSelectedId
                     disabled={selecting === "none"}
                     className="rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/20 disabled:opacity-70"
                   >
-                    Clear
+                    取消
                   </button>
                 ) : (
                   <button
@@ -148,7 +148,7 @@ export function ScenariosList({ scenarios, selectedScenarioId: initialSelectedId
                     className="flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-70"
                   >
                     <Plus size={12} />
-                    Use
+                    选用
                   </button>
                 )}
                 {!scenario.isDefault ? (
@@ -156,7 +156,7 @@ export function ScenariosList({ scenarios, selectedScenarioId: initialSelectedId
                     <Link
                       href={`/scenarios/new?edit=${scenario.id}`}
                       className="rounded-md border border-white/10 p-1.5 text-slate-400 hover:text-white"
-                      title="Edit scenario"
+                      title="编辑场景"
                     >
                       <Edit2 size={14} />
                     </Link>
@@ -165,7 +165,7 @@ export function ScenariosList({ scenarios, selectedScenarioId: initialSelectedId
                       onClick={() => handleDelete(scenario.id)}
                       disabled={deleting === scenario.id}
                       className="rounded-md border border-white/10 p-1.5 text-slate-400 hover:text-red-400"
-                      title="Delete scenario"
+                      title="删除场景"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -175,7 +175,7 @@ export function ScenariosList({ scenarios, selectedScenarioId: initialSelectedId
                   type="button"
                   onClick={() => toggleExpand(scenario.id)}
                   className="rounded-md border border-white/10 p-1.5 text-slate-400 hover:text-white"
-                  title={isExpanded ? "Collapse" : "Expand"}
+                  title={isExpanded ? "收起" : "展开"}
                 >
                   {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </button>
@@ -207,9 +207,9 @@ export function ScenariosList({ scenarios, selectedScenarioId: initialSelectedId
 
 function nodeTypeLabel(type: string) {
   if (type === "event") return "Event";
-  if (type === "decision") return "Decision";
-  if (type === "condition") return "Condition";
-  if (type === "result") return "Result";
+  if (type === "decision") return "决策";
+  if (type === "condition") return "条件";
+  if (type === "result") return "结果";
   return type;
 }
 

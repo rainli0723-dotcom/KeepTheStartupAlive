@@ -3,10 +3,10 @@ import { z } from "zod";
 import { registerEnterpriseAccount } from "@/lib/auth";
 
 const registerSchema = z.object({
-  name: z.string().min(1, "请输入姓名").max(80),
-  email: z.string().email("请输入有效邮箱"),
-  password: z.string().min(8, "密码至少 8 位"),
-  tenantName: z.string().min(1, "请输入企业名称").max(120),
+  name: z.string().min(1, "Name is required").max(80),
+  email: z.string().email("Valid email is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  tenantName: z.string().min(1, "Enterprise name is required").max(120),
 });
 
 export async function POST(request: Request) {
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       tenant: { id: tenant.id, name: tenant.name, plan: tenant.plan, status: tenant.status },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "注册失败";
+    const message = error instanceof Error ? error.message : "Registration failed";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

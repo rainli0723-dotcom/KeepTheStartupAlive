@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Download, Edit2, FileText, Presentation, Save, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Edit2, FileText, Link2, Presentation, Save, X } from "lucide-react";
 import type { FinaleReport } from "@/lib/finale";
 
 type FinaleDetail = FinaleReport & {
@@ -56,6 +56,7 @@ export function FinaleDetailClient({ finale, meetings }: FinaleDetailClientProps
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [editedContent, setEditedContent] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
   const [expandedCycles, setExpandedCycles] = useState<Set<number>>(new Set([meetings[meetings.length - 1]?.cycle ?? 1]));
 
   function toggleCycle(cycle: number) {
@@ -79,6 +80,22 @@ export function FinaleDetailClient({ finale, meetings }: FinaleDetailClientProps
 
   function downloadReport(format: "pdf" | "docx" | "pptx") {
     window.location.href = `/api/finale/${finale.id}/export?format=${format}`;
+  }
+
+  async function createShareLink() {
+    const response = await fetch(`/api/finale/${finale.id}/share`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: finale.title, expiresInDays: 30 }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      alert(result.error ?? "Failed to create share link.");
+      return;
+    }
+    const absoluteUrl = `${window.location.origin}${result.url}`;
+    setShareUrl(absoluteUrl);
+    await navigator.clipboard?.writeText(absoluteUrl).catch(() => undefined);
   }
 
   function exportMarkdownReport() {
@@ -217,7 +234,12 @@ export function FinaleDetailClient({ finale, meetings }: FinaleDetailClientProps
               <div className="font-mono text-5xl font-semibold text-white">{Math.round(finale.score)}</div>
               <div className="mt-2 text-xs text-cyan-100">Finale Score</div>
             </div>
-            <ExportButtons onMarkdown={exportMarkdownReport} onDownload={downloadReport} />
+            <ExportButtons onMarkdown={exportMarkdownReport} onDownload={downloadReport} onShare={createShareLink} />
+            {shareUrl ? (
+              <div className="max-w-[280px] break-all rounded-md border border-emerald-300/20 bg-emerald-300/10 p-2 text-xs text-emerald-100">
+                Share link copied: {shareUrl}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -313,9 +335,11 @@ function EditActions({
 function ExportButtons({
   onMarkdown,
   onDownload,
+  onShare,
 }: {
   onMarkdown: () => void;
   onDownload: (format: "pdf" | "docx" | "pptx") => void;
+  onShare: () => void;
 }) {
   return (
     <div className="grid gap-2">
@@ -350,6 +374,14 @@ function ExportButtons({
       >
         <Presentation size={16} />
         Export PPT
+      </button>
+      <button
+        type="button"
+        onClick={onShare}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-emerald-300/20 bg-emerald-300/10 px-4 py-2.5 text-sm font-semibold text-emerald-50 hover:bg-emerald-300/15"
+      >
+        <Link2 size={16} />
+        Create Read-only Link
       </button>
     </div>
   );

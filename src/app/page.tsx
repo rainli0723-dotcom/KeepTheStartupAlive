@@ -1,42 +1,33 @@
 import Link from "next/link";
-import {
-  BarChart3,
-  BriefcaseBusiness,
-  FileText,
-  GitBranch,
-  LayoutDashboard,
-  Play,
-  ShieldCheck,
-  Users,
-} from "lucide-react";
+import { BarChart3, BriefcaseBusiness, FileText, GitBranch, LayoutDashboard, Play, ShieldCheck, Users } from "lucide-react";
 import { DemoLaunchButton } from "@/components/demo-launch-button";
 
 const proofPoints = [
-  { label: "AI boardroom", value: "Role-based debate" },
-  { label: "Enterprise output", value: "PDF / Word / PPT" },
-  { label: "Governance", value: "Tenant, audit, logs" },
+  { label: "AI 董事会", value: "多角色逐轮讨论" },
+  { label: "企业交付物", value: "PDF / Word / PPT" },
+  { label: "治理能力", value: "租户 / 审计 / 日志" },
 ];
 
 const useCases = [
   {
     icon: <BriefcaseBusiness size={20} />,
-    title: "Founder strategy rehearsal",
-    description: "Simulate financing, pricing, hiring, delivery, and crisis decisions before the real meeting.",
+    title: "创业战略演练",
+    description: "在真实会议前，先模拟融资、定价、招聘、交付和危机决策。",
   },
   {
     icon: <Users size={20} />,
-    title: "AI digital twin board",
-    description: "Let CEO, CFO, CTO, legal, sales, investor, and customer roles challenge the same decision.",
+    title: "AI 数字孪生会议",
+    description: "让 CEO、CFO、CTO、法务、销售、投资人和客户角色共同质询同一个决策。",
   },
   {
     icon: <FileText size={20} />,
-    title: "Board-ready report",
-    description: "Export final reviews as PDF, Word, PPT, and Markdown for management discussion.",
+    title: "可交付报告",
+    description: "将最终复盘导出为 PDF、Word、PPT 和 Markdown，方便管理层讨论。",
   },
   {
     icon: <ShieldCheck size={20} />,
-    title: "Enterprise controls",
-    description: "Account, tenant space, member roles, audit trail, LLM call logs, and data deletion controls.",
+    title: "企业级控制",
+    description: "支持账号、企业空间、成员权限、审计记录、LLM 调用日志和数据删除。",
   },
 ];
 
@@ -51,14 +42,14 @@ export default function HomePage() {
           <nav className="flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold tracking-[0.22em] text-cyan-100">KTSA</div>
-              <div className="text-xs text-slate-400">AI BUSINESS SANDBOX</div>
+              <div className="text-xs text-slate-400">AI 创业经营沙盘</div>
             </div>
             <div className="flex items-center gap-2">
               <Link href="/pricing" className="rounded-md border border-white/10 px-3 py-2 text-sm text-slate-200 hover:bg-white/10">
-                Pricing
+                商业方案
               </Link>
               <Link href="/login" className="rounded-md bg-cyan-300 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-200">
-                Login
+                登录
               </Link>
             </div>
           </nav>
@@ -67,13 +58,13 @@ export default function HomePage() {
             <div>
               <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-xs font-semibold text-cyan-100">
                 <BarChart3 size={14} />
-                For founders, investors, and innovation teams
+                面向创业者、投资人和企业创新团队
               </div>
               <h1 className="max-w-4xl text-5xl font-semibold leading-tight tracking-normal md:text-7xl">
                 Keep The Startup Alive
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-                KTSA is an AI strategy simulation sandbox that turns your company context into a boardroom-style decision rehearsal.
+                KTSA 是一个 AI 创业经营模拟沙盘，把企业背景转化为董事会式决策演练。
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <DemoLaunchButton />
@@ -82,7 +73,7 @@ export default function HomePage() {
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-8 py-3 text-base font-semibold text-white transition-colors hover:bg-white/10"
                 >
                   <Play size={18} />
-                  Start Simulation
+                  开始模拟
                 </Link>
               </div>
             </div>
@@ -114,19 +105,19 @@ export default function HomePage() {
       <section className="mx-auto flex max-w-7xl flex-col gap-3 px-4 pb-12 sm:px-6 md:flex-row lg:px-8">
         <Link href="/security" className="inline-flex items-center gap-2 text-sm text-cyan-100/80 hover:text-cyan-50">
           <ShieldCheck size={16} />
-          Security and data handling
+          安全与数据处理
         </Link>
         <Link href="/scenarios" className="inline-flex items-center gap-2 text-sm text-cyan-100/80 hover:text-cyan-50">
           <GitBranch size={16} />
-          Industry templates
+          行业场景模板
         </Link>
         <Link href="/enterprise" className="inline-flex items-center gap-2 text-sm text-cyan-100/80 hover:text-cyan-50">
           <LayoutDashboard size={16} />
-          Enterprise space
+          企业空间
         </Link>
         <Link href="/admin" className="inline-flex items-center gap-2 text-sm text-cyan-100/80 hover:text-cyan-50">
           <BarChart3 size={16} />
-          Admin console
+          管理后台
         </Link>
       </section>
     </main>

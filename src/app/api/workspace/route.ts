@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireEditor } from "@/lib/access-control";
 import { getDb } from "@/lib/db";
-import { getActiveWorkspace } from "@/lib/workspace";
 import { parseState } from "@/lib/serializers";
 import { serializeLockedMemberIds } from "@/lib/simulation-run";
+import { writeAuditLog } from "@/lib/tenant";
+import { getActiveWorkspace } from "@/lib/workspace";
 
 const workspacePatchSchema = z.object({
   userRole: z.string().min(1).optional(),
@@ -26,8 +28,13 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
+  const access = await requireEditor();
+  if ("error" in access) return access.error;
+
   const workspace = await getActiveWorkspace();
-  if (!workspace) return NextResponse.json({ error: "请先创建沙盘工作区" }, { status: 404 });
+  if (!workspace || workspace.tenantId !== access.auth.tenant.id) {
+    return NextResponse.json({ error: "Workspace not found in this tenant" }, { status: 404 });
+  }
 
   const input = workspacePatchSchema.parse(await request.json());
   const db = getDb();
@@ -48,6 +55,15 @@ export async function PATCH(request: Request) {
       ...(input.startNewRun ? { currentCycle: 1, status: "running" } : {}),
       ...(input.selectedScenarioId !== undefined ? { selectedScenarioId: input.selectedScenarioId } : {}),
     },
+  });
+
+  await writeAuditLog({
+    tenantId: access.auth.tenant.id,
+    actor: access.auth.user.email,
+    action: input.startNewRun ? "workspace.run_restarted" : "workspace.updated",
+    entityType: "SimulationWorkspace",
+    entityId: workspace.id,
+    metadata: { selectedScenarioId: input.selectedScenarioId, status: input.status },
   });
 
   return NextResponse.json({ workspace: updated });

@@ -2,28 +2,36 @@ import { AppShell, PageHeader, Panel } from "@/components/app-shell";
 
 const securityItems = [
   {
-    title: "数据边界",
-    body: "组织档案、上传资料、数字孪生角色和会议记录仅用于当前沙盘推演。当前版本不会把客户资料写入前端代码或公开页面。",
+    title: "租户隔离",
+    body: "企业数据按租户隔离。工作区、团队、报告、LLM、审计、成员和分享链接等关键操作都使用租户级访问校验。",
   },
   {
-    title: "上传限制",
-    body: "系统限制单个上传文件不超过 20MB，并仅接受 txt、md、docx、pdf 和常见音频文件，降低误传大文件和不可解析文件造成的风险。",
+    title: "角色与权限",
+    body: "KTSA 支持管理员、编辑者和只读成员。管理员负责成员和数据管理，编辑者负责模拟操作，只读成员只能查看结果。",
   },
   {
-    title: "AI 调用说明",
-    body: "需要 AI 生成、资料蒸馏或复盘增强时，相关上下文会发送给已配置的 LLM 服务商。企业正式使用前应确认供应商的数据处理政策。",
+    title: "审计日志",
+    body: "系统记录注册、邀请、工作区变更、团队变更、报告生成、报告分享、Prompt 更新和数据删除等关键操作。",
   },
   {
-    title: "交付记录",
-    body: "会议过程、角色观点、决策方案和复盘结论会沉淀为可导出的纪要和报告，便于企业内部复盘、审阅和留档。",
+    title: "LLM 治理",
+    body: "LLM 调用会记录服务商、模型、Prompt 版本、Token 用量、预估成本、重试次数、耗时、请求哈希和错误状态。",
   },
   {
-    title: "当前限制",
-    body: "当前版本仍处于产品化阶段，尚未内置企业登录、多租户权限、审计日志和 SSO。正式 To B 部署前应补齐这些能力。",
+    title: "数据导出与分享",
+    body: "企业报告可导出为 PDF、Word、PPT 和 Markdown。只读报告链接使用随机 token，并支持过期或撤销。",
   },
   {
-    title: "部署建议",
-    body: "生产环境建议使用 PostgreSQL、独立环境变量、私有网络访问控制、定期备份和监控告警；敏感客户建议采用私有化或专属实例。",
+    title: "生产数据库",
+    body: "本地开发使用 SQLite，生产环境使用 PostgreSQL，并配套迁移流程、连接池、备份、恢复演练和 staging / production 隔离。",
+  },
+  {
+    title: "数据删除",
+    body: "租户管理员可以删除企业业务数据，同时保留企业身份和审计记录，用于客户下线和数据最小化流程。",
+  },
+  {
+    title: "商业合规文件",
+    body: "正式付费前，应发布隐私政策、服务条款、DPA、信息安全附件和私有化部署手册，并与客户合同保持一致。",
   },
 ];
 
@@ -31,8 +39,8 @@ export default function SecurityPage() {
   return (
     <AppShell>
       <PageHeader
-        title="安全与企业交付说明"
-        description="面向企业试用、采购评估和私有化部署前的基础说明。"
+        title="安全与合规"
+        description="面向企业客户的数据隔离、权限、审计、LLM 治理、数据导出、删除和生产部署能力。"
       />
 
       <div className="grid gap-4 md:grid-cols-2">

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { Agent, buildConnector, fetch as undiciFetch, ProxyAgent, type Dispatcher } from "undici";
 import { getDb } from "./db";
+import { toJson } from "./serializers";
 
 type LlmMessage = {
   role: "system" | "user" | "assistant";
@@ -14,9 +15,12 @@ const llmMessageSchema = z.object({
 });
 
 const llmTimeoutMs = Number(process.env.LLM_TIMEOUT_MS ?? 60000);
+const llmTemperature = Number(process.env.LLM_TEMPERATURE ?? 0.4);
 const proxyUrl = process.env.LLM_PROXY_URL || process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
 const proxyAgent = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
 const resolveIp = process.env.LLM_RESOLVE_IP;
+const defaultSystemPrompt =
+  "You are KTSA, a To B business simulation sandbox analyst. Your response MUST be a valid JSON object. Do not include any explanation, markdown formatting, or text outside the JSON. The JSON must exactly match the required schema.";
 
 export async function callStructuredLlm<T>(input: {
   messages: LlmMessage[];
@@ -34,8 +38,13 @@ export async function callStructuredLlm<T>(input: {
   const task = input.task ?? "structured_call";
   const startedAt = Date.now();
   const maxRetries = input.maxRetries ?? Number(process.env.LLM_MAX_RETRIES ?? 2);
+  const promptVersion = await ensurePromptVersion({
+    tenantId: input.tenantId,
+    task,
+    schema: input.schema,
+  });
   const requestHash = createHash("sha256")
-    .update(JSON.stringify({ task, model, messages: input.messages }))
+    .update(JSON.stringify({ task, model, promptVersionId: promptVersion.id, messages: input.messages }))
     .digest("hex");
 
   if (!apiKey) {
@@ -57,12 +66,20 @@ export async function callStructuredLlm<T>(input: {
         baseUrl,
         model,
         apiKey,
+        systemPrompt: promptVersion.systemPrompt,
       });
       await writeLlmCallLog({
         tenantId: input.tenantId,
         task,
         provider: new URL(baseUrl).hostname,
         model,
+        promptVersionId: promptVersion.id,
+        modelConfig: {
+          baseUrl: redactBaseUrl(baseUrl),
+          temperature: llmTemperature,
+          timeoutMs: timeoutDuration,
+          responseFormat: baseUrl.includes("minimax") ? "best_effort_json" : "json_object",
+        },
         status: "success",
         attemptCount: attempt,
         durationMs: Date.now() - startedAt,
@@ -84,6 +101,12 @@ export async function callStructuredLlm<T>(input: {
     task,
     provider: new URL(baseUrl).hostname,
     model,
+    promptVersionId: promptVersion.id,
+    modelConfig: {
+      baseUrl: redactBaseUrl(baseUrl),
+      temperature: llmTemperature,
+      timeoutMs: timeoutDuration,
+    },
     status: "failed",
     attemptCount: maxRetries + 1,
     durationMs: Date.now() - startedAt,
@@ -101,8 +124,9 @@ async function executeStructuredLlmRequest<T>(input: {
   baseUrl: string;
   model: string;
   apiKey: string;
+  systemPrompt: string;
 }) {
-  const { messages, schema, requestUrl, timeoutDuration, baseUrl, model, apiKey } = input;
+  const { messages, schema, requestUrl, timeoutDuration, baseUrl, model, apiKey, systemPrompt } = input;
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), timeoutDuration);
 
@@ -110,13 +134,12 @@ async function executeStructuredLlmRequest<T>(input: {
   const dispatcher = forcedIpAgent ?? proxyAgent;
   const requestBody = JSON.stringify({
     model,
-    temperature: 0.4,
+    temperature: llmTemperature,
     ...(baseUrl.includes("minimax") ? {} : { response_format: { type: "json_object" } }),
     messages: [
       {
         role: "system",
-        content:
-          "You are KTSA, a To B business simulation sandbox analyst. Your response MUST be a valid JSON object. Do not include any explanation, markdown formatting, or text outside the JSON. The JSON must exactly match the required schema.",
+        content: systemPrompt,
       },
       ...messages,
     ],
@@ -150,20 +173,51 @@ async function executeStructuredLlmRequest<T>(input: {
   
   if (!content) throw new Error("LLM returned an empty response.");
   
-  // For MiniMax, try to extract JSON from the response if it contains markdown
-  if (baseUrl.includes("minimax") && typeof content === "string") {
-    // Try to find JSON in the response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        return { result: schema.parse(JSON.parse(jsonMatch[0])), usage: payload.usage };
-      } catch {
-        // If parsing fails, continue with original content
-      }
+  return { result: parseAndRepairJson(content, schema), usage: payload.usage };
+}
+
+function parseAndRepairJson<T>(content: string, schema: z.ZodType<T>) {
+  const candidates = [
+    content,
+    content.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim(),
+    content.match(/\{[\s\S]*\}/)?.[0],
+  ].filter(Boolean) as string[];
+
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      return schema.parse(JSON.parse(candidate));
+    } catch (error) {
+      lastError = error;
     }
   }
 
-  return { result: schema.parse(JSON.parse(content)), usage: payload.usage };
+  throw lastError instanceof Error ? new Error(`LLM JSON repair failed: ${lastError.message}`) : new Error("LLM JSON repair failed.");
+}
+
+async function ensurePromptVersion(input: { tenantId?: string | null; task: string; schema: z.ZodType<unknown> }) {
+  const db = getDb();
+  const version = process.env.LLM_PROMPT_VERSION ?? "v1";
+  const tenantId = input.tenantId ?? null;
+  const outputSchema = toJson({ zod: input.schema.description ?? input.schema.constructor.name });
+
+  const existing = await db.promptVersion.findFirst({
+    where: { tenantId, task: input.task, version },
+  });
+  if (existing) return existing;
+
+  return db.promptVersion.create({
+    data: {
+      id: randomUUID(),
+      tenantId,
+      task: input.task,
+      version,
+      systemPrompt: process.env.LLM_SYSTEM_PROMPT ?? defaultSystemPrompt,
+      outputSchema,
+      status: "active",
+      createdBy: "system",
+    },
+  });
 }
 
 async function writeLlmCallLog(input: {
@@ -175,6 +229,8 @@ async function writeLlmCallLog(input: {
   attemptCount: number;
   durationMs: number;
   requestHash: string;
+  promptVersionId?: string | null;
+  modelConfig?: Record<string, unknown>;
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   errorMessage?: string;
 }) {
@@ -190,15 +246,49 @@ async function writeLlmCallLog(input: {
         attemptCount: input.attemptCount,
         durationMs: input.durationMs,
         requestHash: input.requestHash,
+        promptVersionId: input.promptVersionId ?? null,
+        modelConfig: toJson(input.modelConfig ?? {}),
         promptTokens: input.usage?.prompt_tokens,
         completionTokens: input.usage?.completion_tokens,
         totalTokens: input.usage?.total_tokens,
+        estimatedCostUsd: estimateCost(input.model, input.usage),
         errorMessage: input.errorMessage ? input.errorMessage.slice(0, 2000) : null,
       },
     });
   } catch (error) {
     console.warn("[llm] failed to write call log:", error instanceof Error ? error.message : String(error));
   }
+}
+
+function estimateCost(model: string, usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }) {
+  if (!usage) return undefined;
+  const rates = parseModelRates();
+  const key = Object.keys(rates).find((name) => model.includes(name));
+  if (!key) return undefined;
+  const rate = rates[key];
+  const prompt = ((usage.prompt_tokens ?? 0) / 1_000_000) * rate.input;
+  const completion = ((usage.completion_tokens ?? 0) / 1_000_000) * rate.output;
+  return Number((prompt + completion).toFixed(6));
+}
+
+function parseModelRates() {
+  const fallback: Record<string, { input: number; output: number }> = {
+    "gpt-4.1-mini": { input: 0.4, output: 1.6 },
+    "gpt-4.1": { input: 2, output: 8 },
+    "deepseek-chat": { input: 0.27, output: 1.1 },
+    "deepseek-reasoner": { input: 0.55, output: 2.19 },
+  };
+  if (!process.env.LLM_MODEL_RATES_JSON) return fallback;
+  try {
+    return { ...fallback, ...JSON.parse(process.env.LLM_MODEL_RATES_JSON) };
+  } catch {
+    return fallback;
+  }
+}
+
+function redactBaseUrl(value: string) {
+  const url = new URL(value);
+  return `${url.protocol}//${url.hostname}`;
 }
 
 function delay(ms: number) {

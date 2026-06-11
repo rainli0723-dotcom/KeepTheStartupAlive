@@ -14,23 +14,23 @@ const defaultScenarioNames = new Set(defaultScenarios.map((scenario) => scenario
 const industryTemplates = [
   {
     industry: "SaaS",
-    focus: "Pricing, retention, enterprise sales, and product-led growth",
-    metrics: ["ARR", "Churn", "CAC payback", "Expansion"],
+    focus: "定价、续费、企业销售和产品驱动增长",
+    metrics: ["ARR", "流失率", "CAC 回收期", "扩张收入"],
   },
   {
-    industry: "AI Product",
-    focus: "Model cost, reliability, evaluation, and data governance",
-    metrics: ["Inference cost", "Latency", "Quality score", "Risk level"],
+    industry: "AI 产品",
+    focus: "模型成本、稳定性、效果评估和数据治理",
+    metrics: ["推理成本", "延迟", "质量评分", "风险等级"],
   },
   {
-    industry: "Consumer",
-    focus: "Acquisition channels, activation, community, and monetization",
-    metrics: ["Activation", "Retention", "LTV", "Payback"],
+    industry: "消费产品",
+    focus: "获客渠道、激活、社区和商业化",
+    metrics: ["激活率", "留存率", "LTV", "回本周期"],
   },
   {
-    industry: "Enterprise Service",
-    focus: "Delivery quality, contracts, utilization, and account expansion",
-    metrics: ["Gross margin", "Utilization", "SLA", "Renewal"],
+    industry: "企业服务",
+    focus: "交付质量、合同、利用率和大客户扩张",
+    metrics: ["毛利率", "利用率", "SLA", "续约率"],
   },
 ];
 
@@ -51,9 +51,9 @@ export default async function ScenariosPage() {
   return (
     <AppShell>
       <PageHeader
-        title="Industry Templates"
-        description="Use industry scenario templates to pressure-test financing, pricing, growth, delivery, governance, and crisis decisions."
-        action={<Link className="glass-primary-button px-4 py-2 text-sm" href="/scenarios/new">New Scenario</Link>}
+        title="行业场景模板"
+        description="使用行业场景模板，对融资、定价、增长、交付、治理和危机决策进行压力测试。"
+        action={<Link className="glass-primary-button px-4 py-2 text-sm" href="/scenarios/new">新建场景</Link>}
       />
 
       <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -75,7 +75,7 @@ export default async function ScenariosPage() {
       {scenarios.length ? (
         <ScenariosList scenarios={scenarios} selectedScenarioId={workspace?.selectedScenarioId ?? undefined} />
       ) : (
-        <EmptyState title="No scenarios yet" description="Create a scenario to define the events, decisions, conditions, and outcomes used in simulations." />
+        <EmptyState title="暂无场景" description="创建一个场景，用于定义模拟中的事件、决策、条件和结果。" />
       )}
     </AppShell>
   );

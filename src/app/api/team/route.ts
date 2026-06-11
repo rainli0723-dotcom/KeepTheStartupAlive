@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireEditor } from "@/lib/access-control";
 import { getDb } from "@/lib/db";
 import { defaultCapabilities, normalizeCustomMetrics, validateCapabilities } from "@/lib/domain";
 import { toJson } from "@/lib/serializers";
+import { writeAuditLog } from "@/lib/tenant";
 import { getActiveWorkspace } from "@/lib/workspace";
 
 const teamMemberSchema = z.object({
@@ -22,24 +24,25 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const access = await requireEditor();
+  if ("error" in access) return access.error;
+
   const workspace = await getActiveWorkspace();
-  if (!workspace) return NextResponse.json({ error: "请先创建沙盘工作区" }, { status: 404 });
+  if (!workspace || workspace.tenantId !== access.auth.tenant.id) {
+    return NextResponse.json({ error: "Workspace not found in this tenant" }, { status: 404 });
+  }
+
   const parsed = teamMemberSchema.safeParse(await request.json());
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "角色表单数据不完整或格式不正确", detail: parsed.error.flatten() },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Invalid team member payload", detail: parsed.error.flatten() }, { status: 400 });
   }
   const input = parsed.data;
   try {
     validateCapabilities(input.capabilities);
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "能力值必须在 0-100 之间" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Capabilities must be 0-100" }, { status: 400 });
   }
+
   const member = await getDb().teamMember.create({
     data: {
       workspaceId: workspace.id,
@@ -53,5 +56,15 @@ export async function POST(request: Request) {
       decisionPreference: input.decisionPreference,
     },
   });
+
+  await writeAuditLog({
+    tenantId: access.auth.tenant.id,
+    actor: access.auth.user.email,
+    action: "team.member.created",
+    entityType: "TeamMember",
+    entityId: member.id,
+    metadata: { workspaceId: workspace.id, roleName: member.roleName },
+  });
+
   return NextResponse.json({ member });
 }

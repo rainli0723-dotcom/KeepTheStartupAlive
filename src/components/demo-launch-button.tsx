@@ -16,7 +16,7 @@ export function DemoLaunchButton() {
     const body = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      setError(body.error ?? "Demo 创建失败，请稍后重试。");
+      setError(body.error ?? "创建 Demo 失败，请稍后重试。");
       setPending(false);
       return;
     }
@@ -34,7 +34,7 @@ export function DemoLaunchButton() {
         className="inline-flex items-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-300/12 px-8 py-3 text-base font-semibold text-cyan-50 transition hover:border-cyan-200/60 hover:bg-cyan-300/18 disabled:cursor-not-allowed disabled:opacity-70"
       >
         {pending ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
-        {pending ? "正在生成 Demo..." : "3 分钟体验 Demo"}
+        {pending ? "正在创建 Demo..." : "一键启动 Demo"}
       </button>
       {error ? <p className="text-sm text-rose-200">{error}</p> : null}
     </div>

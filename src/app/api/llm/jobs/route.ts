@@ -9,6 +9,7 @@ const jobSchema = z.object({
   task: z.string().min(1),
   payload: z.record(z.string(), z.unknown()).default({}),
   maxAttempts: z.number().int().min(1).max(5).default(3),
+  timeoutMs: z.number().int().min(5000).max(300000).default(60000),
 });
 
 export async function GET() {
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
       task: input.task,
       payload: toJson(input.payload),
       maxAttempts: input.maxAttempts,
+      timeoutMs: input.timeoutMs,
       status: "queued",
     },
   });
