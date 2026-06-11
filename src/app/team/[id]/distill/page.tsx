@@ -36,34 +36,28 @@ export default async function DistillPage({ params }: { params: Promise<{ id: st
         title={`${member.name} 的数字孪生配置`}
         description="上传真实资料生成可编辑画像，也可以导入 Skill，让该角色在会议中具备更明确的专业能力和行动方式。"
       />
-      <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
-        <div className="space-y-5">
-          <Panel className="p-5">
-            <h2 className="mb-4 text-lg font-semibold text-white">上传资料并蒸馏画像</h2>
-            <DistillForm memberId={member.id} />
-          </Panel>
+      <div className="space-y-5">
+        <Panel className="p-5">
+          <h2 className="mb-4 text-lg font-semibold text-white">上传资料并蒸馏画像</h2>
+          <DistillForm memberId={member.id} />
+        </Panel>
 
-          <div id="skill-import" className="scroll-mt-6">
-            <Panel className="p-5 ring-1 ring-cyan-300/20">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.22em] text-cyan-200/80">Skill Matrix</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">导入数字孪生 Skill</h2>
-                </div>
-                <div className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100">
-                  新增能力上下文
-                </div>
+        <div id="skill-import" className="scroll-mt-6">
+          <Panel className="p-5 ring-1 ring-cyan-300/20">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-cyan-200/80">Skill Matrix</p>
+                <h2 className="mt-1 text-lg font-semibold text-white">导入数字孪生 Skill</h2>
               </div>
-              <SkillImportForm memberId={member.id} />
-            </Panel>
-          </div>
-
-          <Link className="inline-block text-sm text-[var(--accent)]" href="/team">
-            返回数字孪生列表
-          </Link>
+              <div className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100">
+                多 Skill 组合
+              </div>
+            </div>
+            <SkillImportForm memberId={member.id} />
+          </Panel>
         </div>
 
-        <div className="space-y-5">
+        <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
           <Panel className="p-5">
             <h2 className="mb-4 text-lg font-semibold text-white">当前画像</h2>
             {member.distillationProfile ? (
@@ -118,6 +112,10 @@ export default async function DistillPage({ params }: { params: Promise<{ id: st
             </div>
           </Panel>
         </div>
+
+        <Link className="inline-block text-sm text-[var(--accent)]" href="/team">
+          返回数字孪生列表
+        </Link>
       </div>
     </AppShell>
   );

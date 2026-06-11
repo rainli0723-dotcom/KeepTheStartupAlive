@@ -170,13 +170,19 @@ describe("twenty round finale fallback", () => {
 describe("skill preset library", () => {
   it("contains the requested external reference skill packs", () => {
     expect(skillPresets.map((preset) => preset.id)).toEqual([
+      "autogpt",
+      "openhands",
       "metagpt",
+      "autogen",
+      "crewai",
+      "langgraph",
+      "babyagi",
+      "generative-agents",
+      "camel",
+      "smol-ai-developer",
       "tinytroupe",
       "agentverse",
-      "the-agent-company",
-      "claw-empire",
-      "simulatrex",
-      "generative-agents",
+      "instagraph",
     ]);
   });
 
@@ -184,5 +190,6 @@ describe("skill preset library", () => {
     const preset = getSkillPreset("metagpt");
     expect(preset?.content).toContain("SOP");
     expect(preset?.sourceUrl).toContain("github.com");
+    expect(preset?.bestFor).toContain("产品负责人");
   });
 });
