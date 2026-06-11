@@ -72,6 +72,14 @@ export default async function EnterprisePage() {
                 <p className="mt-1 text-sm text-[var(--muted)]">Admin, editor, and viewer roles are available.</p>
               </div>
               {auth?.user.role === "admin" ? <TenantMemberForm /> : null}
+              {auth?.user.role === "admin" ? (
+                <Link
+                  href="/admin"
+                  className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10"
+                >
+                  Admin Console
+                </Link>
+              ) : null}
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {tenant.members.map((member) => (
