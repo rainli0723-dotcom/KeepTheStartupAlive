@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireEditor } from "@/lib/access-control";
+import { canEdit } from "@/lib/access-control";
+import { getCurrentAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { defaultCapabilities, normalizeCustomMetrics, validateCapabilities } from "@/lib/domain";
 import { toJson } from "@/lib/serializers";
-import { writeAuditLog } from "@/lib/tenant";
+import { getActiveTenant, writeAuditLog } from "@/lib/tenant";
 import { getActiveWorkspace } from "@/lib/workspace";
 
 const teamMemberSchema = z.object({
@@ -24,12 +25,15 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const access = await requireEditor();
-  if ("error" in access) return access.error;
+  const auth = await getCurrentAuth();
+  if (auth && !canEdit(auth.user.role)) {
+    return NextResponse.json({ error: "当前账号没有编辑权限" }, { status: 403 });
+  }
 
+  const tenant = auth?.tenant ?? await getActiveTenant();
   const workspace = await getActiveWorkspace();
-  if (!workspace || workspace.tenantId !== access.auth.tenant.id) {
-    return NextResponse.json({ error: "Workspace not found in this tenant" }, { status: 404 });
+  if (!workspace || workspace.tenantId !== tenant.id) {
+    return NextResponse.json({ error: "未找到当前企业空间下的沙盘工作区" }, { status: 404 });
   }
 
   const parsed = teamMemberSchema.safeParse(await request.json());
@@ -58,8 +62,8 @@ export async function POST(request: Request) {
   });
 
   await writeAuditLog({
-    tenantId: access.auth.tenant.id,
-    actor: access.auth.user.email,
+    tenantId: tenant.id,
+    actor: auth?.user.email ?? "演示用户",
     action: "team.member.created",
     entityType: "TeamMember",
     entityId: member.id,

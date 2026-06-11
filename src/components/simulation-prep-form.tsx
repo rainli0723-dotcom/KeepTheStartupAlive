@@ -189,7 +189,8 @@ export function SimulationPrepForm({
       }),
     });
     if (!workspaceResponse.ok) {
-      setError("本局配置保存失败。");
+      const body = await workspaceResponse.json().catch(() => ({}));
+      setError(body.error ?? "本局配置保存失败。");
       setPending(false);
       return;
     }

@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireEditor } from "@/lib/access-control";
+import { canEdit } from "@/lib/access-control";
+import { getCurrentAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { parseState } from "@/lib/serializers";
+import { defaultOrganizationState, roleTemplates } from "@/lib/domain";
+import { ensureRoleTemplates } from "@/lib/seed";
+import { parseState, toJson } from "@/lib/serializers";
 import { serializeLockedMemberIds } from "@/lib/simulation-run";
-import { writeAuditLog } from "@/lib/tenant";
+import { getActiveTenant, writeAuditLog } from "@/lib/tenant";
 import { getActiveWorkspace } from "@/lib/workspace";
 
 const workspacePatchSchema = z.object({
@@ -15,6 +18,63 @@ const workspacePatchSchema = z.object({
   selectedScenarioId: z.string().optional().nullable(),
   situation: z.string().optional(),
 });
+
+async function createStarterWorkspace(tenantId: string) {
+  await ensureRoleTemplates();
+
+  const db = getDb();
+  const organization = await db.organizationProfile.create({
+    data: {
+      name: "我的公司",
+      stage: "seed",
+      industry: "待补充",
+      product: "待补充",
+      market: "待补充",
+      cashflow: 60,
+      revenue: "待补充",
+      teamSize: 1,
+      governanceStructure: "创始团队负责制",
+      keyRisks: toJson([]),
+    },
+  });
+
+  const workspace = await db.simulationWorkspace.create({
+    data: {
+      tenantId,
+      name: "默认沙盘工作区",
+      organizationStage: "seed",
+      sandboxType: "growth",
+      currentCycle: 1,
+      status: "active",
+      userRole: "CEO",
+      organizationState: toJson(defaultOrganizationState()),
+      selectedRoleNames: toJson([]),
+      organizationProfileId: organization.id,
+    },
+  });
+
+  await db.teamMember.createMany({
+    data: roleTemplates.map((roleTemplate) => ({
+      workspaceId: workspace.id,
+      name: roleTemplate.name,
+      roleName: roleTemplate.name,
+      isRealMember: false,
+      capabilities: toJson(roleTemplate.defaultCapabilities),
+      customMetrics: toJson(roleTemplate.defaultMetrics),
+      personality: roleTemplate.description,
+      communicationStyle: "简洁、直接、先给判断再说明依据",
+      decisionPreference: "优先选择能在 30 天内验证、且不显著透支现金流的方案",
+    })),
+  });
+
+  await writeAuditLog({
+    tenantId,
+    action: "workspace.starter_created",
+    entityType: "SimulationWorkspace",
+    entityId: workspace.id,
+    metadata: { name: workspace.name },
+  });
+}
 
 export async function GET() {
   const workspace = await getActiveWorkspace();
@@ -28,12 +88,20 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const access = await requireEditor();
-  if ("error" in access) return access.error;
+  const auth = await getCurrentAuth();
+  if (auth && !canEdit(auth.user.role)) {
+    return NextResponse.json({ error: "当前账号没有编辑权限" }, { status: 403 });
+  }
 
-  const workspace = await getActiveWorkspace();
-  if (!workspace || workspace.tenantId !== access.auth.tenant.id) {
-    return NextResponse.json({ error: "Workspace not found in this tenant" }, { status: 404 });
+  const tenant = auth?.tenant ?? await getActiveTenant();
+  let workspace = await getActiveWorkspace();
+  if (!workspace) {
+    await createStarterWorkspace(tenant.id);
+    workspace = await getActiveWorkspace();
+  }
+
+  if (!workspace || workspace.tenantId !== tenant.id) {
+    return NextResponse.json({ error: "未找到当前企业空间下的沙盘工作区" }, { status: 404 });
   }
 
   const input = workspacePatchSchema.parse(await request.json());
@@ -58,8 +126,8 @@ export async function PATCH(request: Request) {
   });
 
   await writeAuditLog({
-    tenantId: access.auth.tenant.id,
-    actor: access.auth.user.email,
+    tenantId: tenant.id,
+    actor: auth?.user.email ?? "演示用户",
     action: input.startNewRun ? "workspace.run_restarted" : "workspace.updated",
     entityType: "SimulationWorkspace",
     entityId: workspace.id,

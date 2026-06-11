@@ -49,7 +49,8 @@ export default function SimulationStartPage() {
       });
 
       if (!workspaceResponse.ok) {
-        throw new Error("配置保存失败");
+        const body = await workspaceResponse.json().catch(() => ({}));
+        throw new Error(body.error ?? "配置保存失败");
       }
 
       if (mode === "free") {
