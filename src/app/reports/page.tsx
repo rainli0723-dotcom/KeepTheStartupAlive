@@ -2,12 +2,15 @@ import Link from "next/link";
 import { AppShell, EmptyState, PageHeader, Panel } from "@/components/app-shell";
 import { ensureDatabase } from "@/lib/bootstrap-db";
 import { getDb } from "@/lib/db";
+import { getActiveTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
   await ensureDatabase();
+  const tenant = await getActiveTenant();
   const meetings = await getDb().strategyMeeting.findMany({
+    where: { workspace: { tenantId: tenant.id } },
     orderBy: { createdAt: "desc" },
     include: { workspace: { include: { organizationProfile: true } }, businessEvent: true, decisionOptions: true },
   });

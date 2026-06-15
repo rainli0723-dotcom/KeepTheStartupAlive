@@ -7,6 +7,9 @@ import { getActiveWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 import type { FinaleReport } from "@/lib/finale";
 import { callStructuredLlm, finaleSchema } from "@/lib/llm";
+import { canEdit } from "@/lib/access-control";
+import { getCurrentAuth } from "@/lib/auth";
+import { getActiveTenant, writeAuditLog } from "@/lib/tenant";
 
 type FinaleRow = {
   id: string;
@@ -233,41 +236,62 @@ async function archiveOrganization(
 
 export async function PATCH(request: Request) {
   try {
+    const auth = await getCurrentAuth();
+    if (auth && !canEdit(auth.user.role)) {
+      return NextResponse.json({ error: "需要管理员或编辑者权限" }, { status: 403 });
+    }
+    const tenant = auth?.tenant ?? (await getActiveTenant());
     const body = await request.json();
     const { id, title, summary, keyDrivers, decisionTrace, alternativeEndings, nextActions } = body;
     if (!id) return NextResponse.json({ error: "缺少 id" }, { status: 400 });
 
-    const existing = await getDb().$queryRaw<FinaleRow[]>`
-      SELECT * FROM SimulationFinale WHERE id = ${id} LIMIT 1
-    `;
-    const current = existing[0];
+    const current = await getDb().simulationFinale.findFirst({
+      where: { id, workspace: { tenantId: tenant.id } },
+    });
     if (!current) return NextResponse.json({ error: "未找到结局报告" }, { status: 404 });
 
     const updated = {
       title: title ?? current.title,
       summary: summary ?? current.summary,
-      keyDrivers: keyDrivers ?? parseStringArray(current.keyDrivers),
-      decisionTrace: decisionTrace ?? parseStringArray(current.decisionTrace),
-      alternativeEndings: alternativeEndings ?? parseStringArray(current.alternativeEndings),
-      nextActions: nextActions ?? parseStringArray(current.nextActions),
+      keyDrivers: keyDrivers === undefined ? parseStringArray(current.keyDrivers) : normalizeEditableList(keyDrivers),
+      decisionTrace: decisionTrace === undefined ? parseStringArray(current.decisionTrace) : normalizeEditableList(decisionTrace),
+      alternativeEndings: alternativeEndings === undefined ? parseStringArray(current.alternativeEndings) : normalizeEditableList(alternativeEndings),
+      nextActions: nextActions === undefined ? parseStringArray(current.nextActions) : normalizeEditableList(nextActions),
     };
 
-    await getDb().$executeRaw`
-      UPDATE SimulationFinale
-      SET
-        title = ${updated.title},
-        summary = ${updated.summary},
-        keyDrivers = ${toJson(updated.keyDrivers)},
-        decisionTrace = ${toJson(updated.decisionTrace)},
-        alternativeEndings = ${toJson(updated.alternativeEndings)},
-        nextActions = ${toJson(updated.nextActions)}
-      WHERE id = ${id}
-    `;
+    await getDb().simulationFinale.update({
+      where: { id: current.id },
+      data: {
+        title: updated.title,
+        summary: updated.summary,
+        keyDrivers: toJson(updated.keyDrivers),
+        decisionTrace: toJson(updated.decisionTrace),
+        alternativeEndings: toJson(updated.alternativeEndings),
+        nextActions: toJson(updated.nextActions),
+      },
+    });
+
+    await writeAuditLog({
+      tenantId: tenant.id,
+      actor: auth?.user.email ?? "demo",
+      action: "report.updated",
+      entityType: "SimulationFinale",
+      entityId: current.id,
+      metadata: { title: updated.title },
+    });
 
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: "保存结局报告失败" }, { status: 500 });
   }
+}
+
+function normalizeEditableList(value: unknown) {
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  return String(value ?? "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 async function getExistingFinale(workspaceId: string) {

@@ -180,6 +180,8 @@ function parseAndRepairJson<T>(content: string, schema: z.ZodType<T>) {
   const candidates = [
     content,
     content.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim(),
+    content.replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*$/m, "$1"),
+    content.match(/\[[\s\S]*\]/)?.[0],
     content.match(/\{[\s\S]*\}/)?.[0],
   ].filter(Boolean) as string[];
 

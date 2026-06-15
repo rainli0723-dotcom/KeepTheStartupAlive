@@ -37,15 +37,15 @@ export type ReportPayload = {
 };
 
 const labels = {
-  cover: "Enterprise Decision Report",
-  summary: "Executive Summary",
-  riskMatrix: "Risk Matrix",
-  roadmap: "Decision Roadmap",
-  actionPlan: "Action Plan",
-  keyDrivers: "Key Drivers",
-  decisionTrace: "Decision Trace",
-  alternativeEndings: "Alternative Endings",
-  timeline: "Meeting Timeline",
+  cover: "KTSA 企业经营模拟复盘报告",
+  summary: "管理层摘要",
+  riskMatrix: "风险矩阵",
+  roadmap: "决策路线图",
+  actionPlan: "行动计划表",
+  keyDrivers: "关键驱动因素",
+  decisionTrace: "关键决策轨迹",
+  alternativeEndings: "备选结局",
+  timeline: "会议过程回顾",
 };
 
 export async function buildWordReport(payload: ReportPayload) {
@@ -55,11 +55,12 @@ export async function buildWordReport(payload: ReportPayload) {
         properties: {},
         children: [
           heading(labels.cover, HeadingLevel.TITLE),
-          paragraph(payload.organization?.name ?? "KTSA Enterprise Customer"),
-          paragraph(`Report: ${payload.finale.title}`),
-          paragraph(`Score: ${Math.round(payload.finale.score)} / 100`),
-          paragraph(`Outcome: ${payload.finale.outcomeType}`),
-          paragraph(`Completed cycles: ${payload.finale.completedCycles}`),
+          paragraph(`企业：${payload.organization?.name ?? "KTSA 企业沙盘"}`),
+          paragraph(`行业：${payload.organization?.industry ?? "未填写"}`),
+          paragraph(`报告标题：${payload.finale.title}`),
+          paragraph(`综合评分：${Math.round(payload.finale.score)} / 100`),
+          paragraph(`结局类型：${payload.finale.outcomeType}`),
+          paragraph(`完成轮次：${payload.finale.completedCycles}`),
           heading(labels.summary, HeadingLevel.HEADING_1),
           paragraph(payload.finale.summary),
           listSection(labels.keyDrivers, payload.finale.keyDrivers),
@@ -70,10 +71,10 @@ export async function buildWordReport(payload: ReportPayload) {
           listSection(labels.alternativeEndings, payload.finale.alternativeEndings),
           heading(labels.timeline, HeadingLevel.HEADING_1),
           ...payload.meetings.flatMap((meeting) => [
-            heading(`Cycle ${meeting.cycle}: ${meeting.agenda}`, HeadingLevel.HEADING_2),
-            ...(meeting.businessEvent ? [paragraph(`Event: ${meeting.businessEvent.title}`), paragraph(meeting.businessEvent.description)] : []),
-            paragraph(`Conclusion: ${meeting.conclusion}`),
-            ...meeting.decisionOptions.map((option) => paragraph(`Option: ${option.title}. Recommendation: ${option.recommendation}. Risk: ${option.risk}`)),
+            heading(`第 ${meeting.cycle} 轮：${meeting.agenda}`, HeadingLevel.HEADING_2),
+            ...(meeting.businessEvent ? [paragraph(`事件：${meeting.businessEvent.title}`), paragraph(meeting.businessEvent.description)] : []),
+            paragraph(`会议结论：${meeting.conclusion}`),
+            ...meeting.decisionOptions.map((option) => paragraph(`选项：${option.title}；建议：${option.recommendation}；风险：${option.risk}`)),
           ]),
         ].flat(),
       },
@@ -87,7 +88,7 @@ export async function buildPptReport(payload: ReportPayload) {
   const pptx = new pptxgen();
   pptx.layout = "LAYOUT_WIDE";
   pptx.author = "KTSA";
-  pptx.subject = "KTSA enterprise decision report";
+  pptx.subject = labels.cover;
   pptx.title = payload.finale.title;
   pptx.company = payload.organization?.name ?? "KTSA";
   pptx.theme = { headFontFace: "Microsoft YaHei", bodyFontFace: "Microsoft YaHei" };
@@ -123,7 +124,7 @@ export async function buildPdfReport(payload: ReportPayload) {
   writePdfTable(doc, labels.actionPlan, buildActionRows(payload));
   writePdfSection(doc, labels.decisionTrace, payload.finale.decisionTrace);
   writePdfSection(doc, labels.alternativeEndings, payload.finale.alternativeEndings);
-  writePdfSection(doc, labels.timeline, payload.meetings.slice(0, 12).map((meeting) => `Cycle ${meeting.cycle}: ${meeting.agenda} - ${meeting.conclusion}`));
+  writePdfSection(doc, labels.timeline, payload.meetings.slice(0, 12).map((meeting) => `第 ${meeting.cycle} 轮：${meeting.agenda} - ${meeting.conclusion}`));
 
   doc.end();
   return done;
@@ -138,10 +139,12 @@ export function buildEnterpriseReportMarkdown(payload: ReportPayload) {
   const lines = [
     `# ${labels.cover}`,
     "",
-    `Customer: ${payload.organization?.name ?? "KTSA Enterprise Customer"}`,
-    `Report: ${payload.finale.title}`,
-    `Score: ${Math.round(payload.finale.score)} / 100`,
-    `Outcome: ${payload.finale.outcomeType}`,
+    `企业：${payload.organization?.name ?? "KTSA 企业沙盘"}`,
+    `行业：${payload.organization?.industry ?? "未填写"}`,
+    `产品：${payload.organization?.product ?? "未填写"}`,
+    `报告标题：${payload.finale.title}`,
+    `综合评分：${Math.round(payload.finale.score)} / 100`,
+    `结局类型：${payload.finale.outcomeType}`,
     "",
     `## ${labels.summary}`,
     payload.finale.summary,
@@ -150,29 +153,42 @@ export function buildEnterpriseReportMarkdown(payload: ReportPayload) {
     ...payload.finale.keyDrivers.map((item) => `- ${item}`),
     "",
     `## ${labels.riskMatrix}`,
-    ...buildRiskRows(payload).map((row) => `- ${row[0]} | ${row[1]} | ${row[2]}`),
+    "| 风险事项 | 风险说明 | 建议动作 |",
+    "| --- | --- | --- |",
+    ...buildRiskRows(payload).map((row) => `| ${row[0]} | ${row[1]} | ${row[2]} |`),
     "",
     `## ${labels.roadmap}`,
-    ...buildRoadmapRows(payload).map((row) => `- ${row[0]}: ${row[1]} (${row[2]})`),
+    "| 阶段 | 决策重点 | 时间窗口 |",
+    "| --- | --- | --- |",
+    ...buildRoadmapRows(payload).map((row) => `| ${row[0]} | ${row[1]} | ${row[2]} |`),
     "",
     `## ${labels.actionPlan}`,
-    ...buildActionRows(payload).map((row) => `- ${row[0]}: ${row[1]} - ${row[2]}`),
+    "| 行动 | 负责人 | 优先级 | 截止窗口 |",
+    "| --- | --- | --- | --- |",
+    ...buildActionRows(payload).map((row) => `| ${row[0]} | ${row[1]} | ${row[2]} | ${row[3]} |`),
   ];
   return lines.join("\n");
 }
 
 function buildRiskRows(payload: ReportPayload) {
-  const optionRisks = payload.meetings.flatMap((meeting) => meeting.decisionOptions.map((option) => [option.title, option.risk, "Owner: management"]));
-  const fallback = payload.finale.keyDrivers.slice(0, 5).map((driver) => [driver, "Monitor execution drift and stakeholder pressure.", "Owner: CEO"]);
+  const optionRisks = payload.meetings.flatMap((meeting) =>
+    meeting.decisionOptions.map((option) => [option.title, option.risk, `第 ${meeting.cycle} 轮后复盘并指定负责人`]),
+  );
+  const fallback = payload.finale.keyDrivers.slice(0, 5).map((driver) => [driver, "该因素会影响现金流、增长或组织稳定性", "由 CEO 牵头在下次经营会上确认"]);
   return (optionRisks.length ? optionRisks : fallback).slice(0, 8);
 }
 
 function buildRoadmapRows(payload: ReportPayload) {
-  return payload.finale.decisionTrace.slice(0, 8).map((item, index) => [`Step ${index + 1}`, item, index < 2 ? "Now" : index < 5 ? "Next 30 days" : "Next 90 days"]);
+  return payload.finale.decisionTrace.slice(0, 8).map((item, index) => [`阶段 ${index + 1}`, item, index < 2 ? "立即处理" : index < 5 ? "30 天内" : "90 天内"]);
 }
 
 function buildActionRows(payload: ReportPayload) {
-  return payload.finale.nextActions.slice(0, 10).map((item, index) => [`Action ${index + 1}`, item, index < 3 ? "High" : "Medium"]);
+  return payload.finale.nextActions.slice(0, 10).map((item, index) => [
+    item,
+    index % 3 === 0 ? "CEO" : index % 3 === 1 ? "业务负责人" : "职能负责人",
+    index < 3 ? "高" : "中",
+    index < 3 ? "7 天内" : index < 6 ? "30 天内" : "90 天内",
+  ]);
 }
 
 function heading(text: string, level: (typeof HeadingLevel)[keyof typeof HeadingLevel]) {
@@ -205,10 +221,10 @@ function addTitleSlide(pptx: pptxgen, payload: ReportPayload) {
   slide.background = { color: "07111F" };
   slide.addText(labels.cover, { x: 0.6, y: 0.45, w: 11.8, h: 0.4, fontSize: 15, color: "67E8F9", bold: true });
   slide.addText(payload.finale.title, { x: 0.6, y: 1.05, w: 8.2, h: 0.9, fontSize: 28, bold: true, color: "FFFFFF", fit: "shrink" });
-  slide.addText(payload.organization?.name ?? "KTSA Enterprise Customer", { x: 0.65, y: 2.05, w: 7.2, h: 0.35, fontSize: 13, color: "CBD5E1" });
+  slide.addText(payload.organization?.name ?? "KTSA 企业沙盘", { x: 0.65, y: 2.05, w: 7.2, h: 0.35, fontSize: 13, color: "CBD5E1" });
   slide.addText(payload.finale.summary, { x: 0.65, y: 2.75, w: 7.5, h: 2.5, fontSize: 14, color: "CBD5E1", fit: "shrink" });
   slide.addText(`${Math.round(payload.finale.score)}`, { x: 9.4, y: 1.55, w: 2.3, h: 1, fontSize: 46, bold: true, color: "67E8F9", align: "center" });
-  slide.addText("Finale Score", { x: 9.4, y: 2.45, w: 2.3, h: 0.3, fontSize: 12, color: "94A3B8", align: "center" });
+  slide.addText("综合评分", { x: 9.4, y: 2.45, w: 2.3, h: 0.3, fontSize: 12, color: "94A3B8", align: "center" });
 }
 
 function addBulletsSlide(pptx: pptxgen, title: string, items: string[]) {
@@ -240,20 +256,20 @@ function addTimelineSlide(pptx: pptxgen, meetings: ExportMeeting[]) {
   slide.background = { color: "07111F" };
   slide.addText(labels.timeline, { x: 0.6, y: 0.4, w: 11, h: 0.5, fontSize: 24, bold: true, color: "FFFFFF" });
   slide.addText(
-    meetings.slice(0, 8).map((meeting) => `C${meeting.cycle} ${meeting.agenda}\n${meeting.conclusion}`).join("\n\n"),
+    meetings.slice(0, 8).map((meeting) => `第 ${meeting.cycle} 轮：${meeting.agenda}\n${meeting.conclusion}`).join("\n\n"),
     { x: 0.75, y: 1.15, w: 11.5, h: 5, fontSize: 12, color: "DDE7F0", fit: "shrink" },
   );
 }
 
 function writePdfCover(doc: PDFKit.PDFDocument, payload: ReportPayload) {
-  doc.fontSize(10).fillColor("#67e8f9").text(labels.cover.toUpperCase());
+  doc.fontSize(10).fillColor("#0891b2").text(labels.cover);
   doc.moveDown(0.6);
   doc.fontSize(22).fillColor("#111827").text(payload.finale.title, { width: 500 });
   doc.moveDown(0.5);
-  doc.fontSize(11).fillColor("#334155").text(`Customer: ${payload.organization?.name ?? "KTSA Enterprise Customer"}`);
-  doc.text(`Industry: ${payload.organization?.industry ?? "Not specified"}`);
-  doc.text(`Score: ${Math.round(payload.finale.score)} / 100`);
-  doc.text(`Outcome: ${payload.finale.outcomeType}`);
+  doc.fontSize(11).fillColor("#334155").text(`企业：${payload.organization?.name ?? "KTSA 企业沙盘"}`);
+  doc.text(`行业：${payload.organization?.industry ?? "未填写"}`);
+  doc.text(`综合评分：${Math.round(payload.finale.score)} / 100`);
+  doc.text(`结局类型：${payload.finale.outcomeType}`);
 }
 
 function writePdfSection(doc: PDFKit.PDFDocument, title: string, items: string[]) {

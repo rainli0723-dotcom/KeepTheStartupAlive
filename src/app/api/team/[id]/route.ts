@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { canEdit } from "@/lib/access-control";
+import { getCurrentAuth } from "@/lib/auth";
+import { getScopedTeamMember } from "@/lib/access-control";
 import { getDb } from "@/lib/db";
 import { defaultCapabilities, normalizeCustomMetrics, validateCapabilities } from "@/lib/domain";
 import { toJson } from "@/lib/serializers";
+import { writeAuditLog } from "@/lib/tenant";
 
 const teamMemberSchema = z.object({
   name: z.string().min(1),
@@ -17,20 +21,24 @@ const teamMemberSchema = z.object({
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  const member = await getDb().teamMember.findUnique({
-    where: { id },
-    include: { distillationProfile: true, sourceDocuments: { orderBy: { createdAt: "desc" } } },
-  });
+  const { member } = await getScopedTeamMember(id);
   if (!member) return NextResponse.json({ error: "未找到成员" }, { status: 404 });
   return NextResponse.json({ member });
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
+  const auth = await getCurrentAuth();
+  if (auth && !canEdit(auth.user.role)) {
+    return NextResponse.json({ error: "需要管理员或编辑者权限" }, { status: 403 });
+  }
+  const { tenant, member: existing } = await getScopedTeamMember(id);
+  if (!existing) return NextResponse.json({ error: "未找到成员" }, { status: 404 });
+
   const input = teamMemberSchema.parse(await request.json());
   validateCapabilities(input.capabilities);
   const member = await getDb().teamMember.update({
-    where: { id },
+    where: { id: existing.id },
     data: {
       name: input.name,
       roleName: input.roleName,
@@ -42,11 +50,34 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       decisionPreference: input.decisionPreference,
     },
   });
+  await writeAuditLog({
+    tenantId: tenant.id,
+    actor: auth?.user.email ?? "demo",
+    action: "team_member.updated",
+    entityType: "TeamMember",
+    entityId: member.id,
+    metadata: { name: member.name, roleName: member.roleName },
+  });
   return NextResponse.json({ member });
 }
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  await getDb().teamMember.delete({ where: { id } });
+  const auth = await getCurrentAuth();
+  if (auth && !canEdit(auth.user.role)) {
+    return NextResponse.json({ error: "需要管理员或编辑者权限" }, { status: 403 });
+  }
+  const { tenant, member } = await getScopedTeamMember(id);
+  if (!member) return NextResponse.json({ error: "未找到成员" }, { status: 404 });
+
+  await getDb().teamMember.delete({ where: { id: member.id } });
+  await writeAuditLog({
+    tenantId: tenant.id,
+    actor: auth?.user.email ?? "demo",
+    action: "team_member.deleted",
+    entityType: "TeamMember",
+    entityId: member.id,
+    metadata: { name: member.name, roleName: member.roleName },
+  });
   return NextResponse.json({ ok: true });
 }

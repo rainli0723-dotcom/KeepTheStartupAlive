@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { buildEnterpriseReportMarkdown } from "@/lib/report-export";
 import { getReportPayload } from "@/lib/report-payload";
 import { getDb } from "@/lib/db";
+import { isActiveShareLink } from "@/lib/enterprise-safety";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,9 @@ export default async function SharedReportPage({ params }: { params: Promise<{ t
   const { token } = await params;
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const share = await getDb().reportShareLink.findUnique({ where: { tokenHash } });
-  if (!share || share.status !== "active" || share.revokedAt || (share.expiresAt && share.expiresAt < new Date())) notFound();
+  if (!share || !isActiveShareLink(share)) notFound();
 
-  const payload = await getReportPayload(share.finaleId);
+  const payload = await getReportPayload(share.finaleId, { tenantId: share.tenantId });
   if (!payload) notFound();
 
   const markdown = buildEnterpriseReportMarkdown(payload);

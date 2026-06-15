@@ -12,6 +12,9 @@
     "db:push": "prisma db push",
     "db:prod:migrate": "prisma migrate deploy --schema prisma-postgres/schema.prisma",
     "db:prod:status": "prisma migrate status --schema prisma-postgres/schema.prisma",
+    "worker:llm": "node scripts/llm-worker.mjs",
+    "worker:llm:once": "node scripts/llm-worker.mjs --once",
+    "tenant:export": "node scripts/export-tenant-data.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   });
 
   if (!user || !verifyPassword(input.password, user.passwordHash) || user.status !== "active") {
-    return NextResponse.json({ error: "邮箱或密码不正确" }, { status: 401 });
+    return NextResponse.json({ error: "账号或密码不正确" }, { status: 401 });
   }
 
   await createSession(user.id);

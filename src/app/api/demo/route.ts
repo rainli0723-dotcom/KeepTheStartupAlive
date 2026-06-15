@@ -6,41 +6,34 @@ import { toJson } from "@/lib/serializers";
 import { serializeLockedMemberIds } from "@/lib/simulation-run";
 import { assignWorkspaceToDefaultTenant, writeAuditLog } from "@/lib/tenant";
 import { businessCycleSchema, callStructuredLlm } from "@/lib/llm";
+import { getDemoTemplate } from "@/lib/demo-templates";
+import { getCurrentAuth } from "@/lib/auth";
+import { assertTenantUsageAllowed } from "@/lib/usage-limits";
 
-const demoRoleNames = ["创始人", "CEO", "CTO", "CFO", "产品负责人", "销售负责人", "法务顾问", "投资人"];
-
-export async function POST() {
+export async function POST(request: Request) {
   await ensureRoleTemplates();
   await ensureScenarios();
 
+  const body = await request.json().catch(() => ({}));
+  const auth = await getCurrentAuth();
+  if (auth) {
+    const quota = await assertTenantUsageAllowed(auth.tenant.id, "workspaces");
+    if (!quota.ok) return NextResponse.json({ error: quota.reason }, { status: 402 });
+  }
+
+  const template = getDemoTemplate(typeof body.templateId === "string" ? body.templateId : null);
   const db = getDb();
-  const organizationProfile = {
-    name: "北辰智能",
-    stage: "seed",
-    industry: "企业 AI 应用",
-    product: "面向 To B 销售团队的 AI 客户情报与跟进助手",
-    market: "年营收 5000 万以上、销售流程复杂的 B2B 软件与工业服务公司",
-    cashflow: 58,
-    revenue: "MRR 18 万，已签 6 个付费试点客户",
-    teamSize: 14,
-    governanceStructure: "创始团队负责制，投资人每月参与经营复盘",
-    keyRisks: ["销售周期过长", "交付依赖创始人", "试点转正式付费率不稳定"],
-  };
+  const organizationProfile = template.organizationProfile;
   const organizationState = {
     ...defaultOrganizationState(),
-    cashflow: 58,
-    growth: 64,
-    teamPressure: 66,
-    technicalRisk: 52,
-    financingAttractiveness: 61,
-    survivalProbability: 68,
+    ...template.state,
   };
-  const roleDefinitions = demoRoleNames
+  const roleDefinitions = template.roleNames
     .map((name) => roleTemplates.find((roleTemplate) => roleTemplate.name === name))
     .filter((roleTemplate): roleTemplate is NonNullable<typeof roleTemplate> => Boolean(roleTemplate));
   const chair = resolveMeetingChair({
-    userRole: "CEO",
-    sandboxType: "growth" as SandboxType,
+    userRole: template.userRole,
+    sandboxType: template.sandboxType as SandboxType,
     availableRoles: roleDefinitions.map((role) => role.name),
   });
 
@@ -52,15 +45,15 @@ export async function POST() {
         {
           role: "user",
           content: JSON.stringify({
-            task: "为 To B 产品演示生成第一轮商业模拟经营会议。所有会展示给用户的事件、角色观点、结论和决策方案都必须由你生成。",
+            task: "为 To B 产品演示生成第一轮经营事件和一场像真人开会的短会议。",
             organization: organizationProfile,
             workspace: {
-              stage: "seed",
-              sandboxType: "growth",
+              stage: organizationProfile.stage,
+              sandboxType: template.sandboxType,
               currentCycle: 1,
               totalCycles: 20,
               organizationState,
-              userRole: "CEO",
+              userRole: template.userRole,
               chair,
             },
             roles: roleDefinitions.map((role) => ({
@@ -69,10 +62,10 @@ export async function POST() {
               capabilities: role.defaultCapabilities,
               customMetrics: role.defaultMetrics,
               personality: role.description,
-              communicationStyle: "简洁、直接、先给判断再说明依据",
-              decisionPreference: "优先选择能在 30 天内验证、且不显著透支现金流的方案",
+              communicationStyle: "短句、口语化、带一点犹豫或追问，不要像咨询报告。",
+              decisionPreference: "先指出真实约束，再给出一个能在 7-30 天内验证的动作。",
             })),
-            userInput: "这是一条用于产品演示的第一轮经营模拟，请围绕真实 To B 销售、交付、现金流和融资风险生成会议。",
+            userInput: template.meetingPrompt,
             outputContract: {
               event: {
                 eventType: "one of: opportunity, risk, specialized",
@@ -89,7 +82,7 @@ export async function POST() {
               },
               meeting: {
                 agenda: "string",
-                participantViews: [{ roleName: "string", view: "string" }],
+                participantViews: [{ roleName: "string", view: "一人一句，像真实会议发言，短而具体" }],
                 conclusion: "string",
                 options: [
                   {
@@ -112,12 +105,13 @@ export async function POST() {
               },
             },
             requirements: [
-              "生成 2-3 个决策方案",
-              "participantViews 只能使用 roles 数组中的角色",
-              "每个角色观点必须像真实经营会议发言，而不是说明文字",
-              "会议必须有分歧、取舍和可执行结论",
-              "不要使用游戏化表达",
-              "只返回 JSON object，不要 Markdown",
+              "事件要像真实创业公司会遇到的问题，不要泛泛而谈。",
+              "participantViews 必须每个角色一条，不能合并成长段报告。",
+              "每句发言 20-60 个中文字，有追问、反驳、让步或担忧。",
+              "不同角色口吻要明显不同，销售关注成交，CFO 关注现金，CLO 关注风险，CTO 关注技术边界。",
+              "如果角色观点冲突，要体现在发言里。",
+              "结论要像会议主持人收束，不要像新闻稿。",
+              "只返回 JSON object，不要 Markdown。",
             ],
           }),
         },
@@ -126,7 +120,7 @@ export async function POST() {
   } catch (error) {
     const message = error instanceof Error ? error.message : "LLM Demo 生成失败";
     return NextResponse.json(
-      { error: message, detail: "Demo 不使用内置会议台词；请确认 LLM 配置可用后重试。" },
+      { error: message, detail: "Demo 需要可用的 LLM 配置。请检查 API Key、模型和网络连接后重试。" },
       { status: 503 },
     );
   }
@@ -148,12 +142,12 @@ export async function POST() {
 
   const workspace = await db.simulationWorkspace.create({
     data: {
-      name: "北辰智能 - 董事会前经营推演",
-      organizationStage: "seed",
-      sandboxType: "growth",
+      name: template.workspaceName,
+      organizationStage: organizationProfile.stage,
+      sandboxType: template.sandboxType,
       currentCycle: 2,
       status: "active",
-      userRole: "CEO",
+      userRole: template.userRole,
       organizationState: toJson(organizationState),
       selectedRoleNames: toJson([]),
       organizationProfileId: organization.id,
@@ -172,8 +166,8 @@ export async function POST() {
           capabilities: toJson(roleTemplate.defaultCapabilities),
           customMetrics: toJson(roleTemplate.defaultMetrics),
           personality: roleTemplate.description,
-          communicationStyle: "简洁、直接、先给判断再说明依据",
-          decisionPreference: "优先选择能在 30 天内验证、且不显著透支现金流的方案",
+          communicationStyle: "短句、口语化、直接说判断，不要长篇报告。",
+          decisionPreference: "提出 7-30 天内可验证的动作，并说明一个风险。",
         },
       }),
     ),
@@ -223,7 +217,7 @@ export async function POST() {
     action: "workspace.demo_created",
     entityType: "SimulationWorkspace",
     entityId: workspace.id,
-    metadata: { organization: organization.name, scenario: "董事会前经营推演 Demo" },
+    metadata: { organization: organization.name, scenario: template.name, templateId: template.id },
   });
 
   return NextResponse.json({ workspaceId: workspace.id, redirectTo: "/simulation/run" });

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getCurrentAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { toJson } from "@/lib/serializers";
+import { assertTenantUsageAllowed } from "@/lib/usage-limits";
 
 const jobSchema = z.object({
   task: z.string().min(1),
@@ -29,6 +30,9 @@ export async function POST(request: Request) {
   if (!auth) return NextResponse.json({ error: "Please login first" }, { status: 401 });
 
   const input = jobSchema.parse(await request.json());
+  const quota = await assertTenantUsageAllowed(auth.tenant.id, "llm");
+  if (!quota.ok) return NextResponse.json({ error: quota.reason }, { status: 402 });
+
   const job = await getDb().llmJob.create({
     data: {
       id: randomUUID(),

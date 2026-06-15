@@ -45,6 +45,18 @@ npm run build
 npm start
 ```
 
+Run the LLM worker as a separate process:
+
+```bash
+KTSA_APP_URL="https://your-domain.example.com" npm run worker:llm
+```
+
+For smoke testing one queued job:
+
+```bash
+KTSA_APP_URL="https://your-domain.example.com" npm run worker:llm:once
+```
+
 Check migration status:
 
 ```bash
@@ -65,6 +77,25 @@ npm run db:prod:status
 3. Snapshot production database.
 4. Apply migrations in production.
 5. Run `npm run db:prod:status` and `/api/health`.
+
+## Production Acceptance Checklist
+
+Before selling or delivering KTSA as a To B product, verify the following in a real PostgreSQL staging environment:
+
+- `DATABASE_URL` uses `postgresql://` or `postgres://`, not SQLite.
+- `npm run prisma:generate:prod` completes successfully.
+- `npm run db:prod:migrate` applies all migrations without drift.
+- `npm run db:prod:status` reports the database is up to date.
+- `/api/health` returns healthy database and application status.
+- A new enterprise account can register and log in.
+- A second enterprise account cannot see the first tenant's workspaces, team members, meetings, reports, or share links.
+- Viewer users cannot create, update, delete, import, distill, or export protected business data.
+- Company document upload returns immediately and creates an `LlmJob` for background analysis.
+- The LLM worker can process `organization.analyze_profile` jobs and update the organization profile.
+- `npm run worker:llm:once` can process one queued job without relying on a user page request.
+- Simulation cycle generation creates one business event, one meeting, and 2-3 decision options.
+- PDF, Word, PPT, and Markdown exports work against PostgreSQL data.
+- Backup restore has been tested into a separate staging database.
 
 ## Backup and Restore
 
@@ -89,6 +120,32 @@ Default recommendation:
 
 Use separate databases, environment variables, LLM keys, and worker tokens for staging and production. Never point staging at the production database.
 
+Recommended environment split:
+
+- `staging`: test migrations, LLM worker, report export, backup restore, and customer demos with non-production data.
+- `production`: customer data only, restricted admin access, managed backups, and separate LLM key.
+- `local`: SQLite demo database only. Never copy `prisma/dev.db` into staging or production.
+
+## Connection Pooling
+
+Use a managed PostgreSQL pooler or platform connection pool. For early pilots:
+
+- Web app pool: 2-10 connections.
+- LLM worker pool: 1-3 connections.
+- Migration connection: direct database connection, not transaction-pooling mode when migrations require DDL.
+
+Monitor connection saturation before increasing worker concurrency.
+
 ## Data Migration From SQLite
 
 For early customers, export from SQLite using Prisma or a one-off script, then import into PostgreSQL after mapping tenant IDs. Do not reuse the local `prisma/dev.db` file in production.
+
+## Tenant Data Export
+
+Export a single tenant for backup, migration, or customer handoff:
+
+```bash
+npm run tenant:export -- --tenant=<tenantId> --out=tenant-export.json
+```
+
+The export includes tenant members, users without password hashes, workspaces, organization documents, team members, meetings, finales, share links, audit logs, LLM logs, jobs, and prompt versions.

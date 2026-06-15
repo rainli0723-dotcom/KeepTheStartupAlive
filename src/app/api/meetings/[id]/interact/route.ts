@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { canEdit, getScopedMeeting } from "@/lib/access-control";
+import { getCurrentAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { parseJson } from "@/lib/domain";
 import { callStructuredLlm, meetingInteractionSchema } from "@/lib/llm";
 import { appendInteractionLog, parseInteractionLog } from "@/lib/simulation-run";
+import { writeAuditLog } from "@/lib/tenant";
 
 const interactionInputSchema = z.object({
   message: z.string().min(1),
@@ -17,23 +20,13 @@ type ParticipantView = {
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
+  const auth = await getCurrentAuth();
+  if (auth && !canEdit(auth.user.role)) {
+    return NextResponse.json({ error: "需要管理员或编辑者权限" }, { status: 403 });
+  }
   const input = interactionInputSchema.parse(await request.json());
   const db = getDb();
-  const meeting = await db.strategyMeeting.findUnique({
-    where: { id },
-    include: {
-      workspace: {
-        select: {
-          userRole: true,
-          organizationProfile: {
-            select: { name: true, stage: true, industry: true, product: true },
-          },
-        },
-      },
-      businessEvent: { select: { title: true, description: true, eventType: true } },
-      decisionOptions: { select: { id: true, title: true, recommendation: true, upside: true, risk: true } },
-    },
-  });
+  const { tenant, meeting } = await getScopedMeeting(id);
 
   if (!meeting) return NextResponse.json({ error: "未找到会议" }, { status: 404 });
 
@@ -92,10 +85,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
               suggestedChoices: ["2-4 个下一步可选行动"],
             },
             requirements: [
-              "dialogueTurns 必须生成 2-3 个回合，按真实会议发言顺序排列",
+              "dialogueTurns 必须生成 3-5 个回合，按真实会议发言顺序排列",
               "每个 dialogueTurn 都必须像具体角色在会议中的发言，不要解释你在生成什么",
+              "每条 message 只说 1-2 句，尽量短，不要写成长段分析",
+              "第一条 dialogueTurn 必须回应 userMessage 或 selectedOption，不要另起炉灶",
+              "后续角色必须接住上一位的意思，可以追问、反驳、补充、让步或要求更具体的数据",
+              "禁止使用“首先、其次、综上、建议如下、从某某角度来看”这类报告腔模板",
+              "不同角色要有不同说话方式，不要所有人都像同一个顾问",
+              "至少一个角色要提出真实分歧或保留意见，但不要为了吵架而吵架",
               "speaker 必须来自 speakers，或使用会议主持",
-              "assistantReply 必须在所有 dialogueTurns 之后做简短总结",
+              "assistantReply 必须在所有 dialogueTurns 之后做简短主持归纳，不超过 2 句",
               "evaluation 必须给出经营判断，不允许为空",
               "只返回 JSON object，不要 Markdown",
             ],
@@ -130,6 +129,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     data: {
       userInput: appendInteractionLog(meeting.userInput, entry),
     },
+  });
+
+  await writeAuditLog({
+    tenantId: tenant.id,
+    actor: auth?.user.email ?? "demo",
+    action: "meeting.interacted",
+    entityType: "StrategyMeeting",
+    entityId: meeting.id,
+    metadata: { selectedOptionId: input.selectedOptionId ?? null },
   });
 
   return NextResponse.json({

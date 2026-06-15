@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { buildPdfReport, buildPptReport, buildWordReport, reportFileName, type ReportPayload } from "@/lib/report-export";
 import { getReportPayload } from "@/lib/report-payload";
+import { getActiveTenant, writeAuditLog } from "@/lib/tenant";
+import { getCurrentAuth } from "@/lib/auth";
+import { assertTenantUsageAllowed } from "@/lib/usage-limits";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +16,26 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     return NextResponse.json({ error: "Unsupported export format" }, { status: 400 });
   }
 
-  const payload = await getReportPayload(id);
+  const auth = await getCurrentAuth();
+  const tenant = auth?.tenant ?? (await getActiveTenant());
+  const quota = await assertTenantUsageAllowed(tenant.id, "exports");
+  if (!quota.ok) return NextResponse.json({ error: quota.reason }, { status: 402 });
+
+  const payload = await getReportPayload(id, { tenantId: tenant.id });
   if (!payload) return NextResponse.json({ error: "Finale report not found" }, { status: 404 });
 
   const buffer = await buildBuffer(format, payload);
   const contentType = contentTypes[format];
   const filename = reportFileName(payload.finale.title, format);
+
+  await writeAuditLog({
+    tenantId: tenant.id,
+    actor: auth?.user.email ?? "demo",
+    action: "report.exported",
+    entityType: "SimulationFinale",
+    entityId: payload.finale.id,
+    metadata: { format, filename },
+  });
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {

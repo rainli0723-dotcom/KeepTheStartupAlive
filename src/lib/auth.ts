@@ -123,7 +123,7 @@ export async function registerEnterpriseAccount(input: {
   const db = getDb();
   const email = input.email.trim().toLowerCase();
   const existing = await db.appUser.findUnique({ where: { email } });
-  if (existing) throw new Error("该邮箱已经注册");
+  if (existing) throw new Error("这个邮箱已经注册");
 
   const tenant = await db.enterpriseTenant.create({
     data: {
@@ -175,4 +175,8 @@ export async function registerEnterpriseAccount(input: {
 
 export function canManageTenant(role?: string | null) {
   return role === "admin";
+}
+
+export function canEditTenant(role?: string | null) {
+  return role === "admin" || role === "editor";
 }

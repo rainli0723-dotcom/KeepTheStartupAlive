@@ -3,7 +3,7 @@ import { SimulationRunClient } from "@/components/simulation-run-client";
 import { EmptyState } from "@/components/app-shell";
 import { parseJson } from "@/lib/domain";
 import { getLockedMemberIds, parseInteractionLog } from "@/lib/simulation-run";
-import { getActiveWorkspace } from "@/lib/workspace";
+import { getActiveWorkspaceForRun } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ type ParticipantView = {
 };
 
 export default async function SimulationRunPage() {
-  const workspace = await getActiveWorkspace();
+  const workspace = await getActiveWorkspaceForRun();
   if (!workspace) {
     return (
       <main className="min-h-screen bg-black p-6 text-white">

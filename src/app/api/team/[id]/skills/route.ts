@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server";
+import { canEdit, getScopedTeamMember } from "@/lib/access-control";
+import { getCurrentAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { extractTextFromUpload } from "@/lib/extract";
 import { getSkillPreset } from "@/lib/skill-presets";
+import { writeAuditLog } from "@/lib/tenant";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
+  const auth = await getCurrentAuth();
+  if (auth && !canEdit(auth.user.role)) {
+    return NextResponse.json({ error: "需要管理员或编辑者权限" }, { status: 403 });
+  }
   const db = getDb();
-  const member = await db.teamMember.findUnique({ where: { id } });
+  const { tenant, member } = await getScopedTeamMember(id);
   if (!member) return NextResponse.json({ error: "未找到数字孪生角色" }, { status: 404 });
 
   const formData = await request.formData();
@@ -74,6 +81,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       extractedText,
       sourceKind: "skill",
     },
+  });
+
+  await writeAuditLog({
+    tenantId: tenant.id,
+    actor: auth?.user.email ?? "demo",
+    action: "team_member.skill_imported",
+    entityType: "TeamMember",
+    entityId: member.id,
+    metadata: { fileName, presetCount: presets.length, hasFile, hasUserText: Boolean(skillText) },
   });
 
   return NextResponse.json({ source });

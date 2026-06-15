@@ -6,44 +6,36 @@ import { getDb } from "@/lib/db";
 import { parseJson } from "@/lib/domain";
 import type { FinaleReport } from "@/lib/finale";
 import { parseInteractionLog } from "@/lib/simulation-run";
+import { getActiveTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
-
-type FinaleRow = {
-  id: string;
-  workspaceId: string;
-  completedCycles: number;
-  outcomeType: string;
-  title: string;
-  summary: string;
-  score: number;
-  keyDrivers: string;
-  decisionTrace: string;
-  alternativeEndings: string;
-  nextActions: string;
-  rawReport: string;
-  createdAt: string;
-};
 
 export default async function FinaleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await ensureDatabase();
   const { id } = await params;
   const db = getDb();
+  const tenant = await getActiveTenant();
 
-  const finaleRows = await db.$queryRaw<FinaleRow[]>`
-    SELECT * FROM SimulationFinale WHERE id = ${id}
-  `;
-  const finaleRow = finaleRows[0];
+  const finaleRow = await db.simulationFinale.findFirst({
+    where: { id, workspace: { tenantId: tenant.id } },
+  });
   if (!finaleRow) notFound();
 
-  const meetings = await db.strategyMeeting.findMany({
-    where: { workspaceId: finaleRow.workspaceId },
-    orderBy: { cycle: "asc" },
-    include: { businessEvent: true, decisionOptions: true },
-  });
+  const [meetings, comments] = await Promise.all([
+    db.strategyMeeting.findMany({
+      where: { workspaceId: finaleRow.workspaceId },
+      orderBy: { cycle: "asc" },
+      include: { businessEvent: true, decisionOptions: true },
+    }),
+    db.collaborationComment.findMany({
+      where: { tenantId: tenant.id, finaleId: finaleRow.id },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
 
   const finale = {
     id: finaleRow.id,
+    completedCycles: finaleRow.completedCycles,
     outcomeType: finaleRow.outcomeType,
     title: finaleRow.title,
     summary: finaleRow.summary,
@@ -58,10 +50,17 @@ export default async function FinaleDetailPage({ params }: { params: Promise<{ i
     <AppShell>
       <PageHeader
         title="复盘报告"
-        description={`${finaleRow.completedCycles} 轮经营周期 · 结局：${finaleRow.title}`}
+        description={`${finaleRow.completedCycles} 轮模拟后的经营复盘 · 结局：${finaleRow.title}`}
       />
       <FinaleDetailClient
         finale={finale as FinaleReport & { id: string; completedCycles: number }}
+        comments={comments.map((comment) => ({
+          id: comment.id,
+          author: comment.author,
+          body: comment.body,
+          status: comment.status,
+          createdAt: comment.createdAt.toISOString(),
+        }))}
         meetings={meetings.map((m) => ({
           id: m.id,
           cycle: m.cycle,

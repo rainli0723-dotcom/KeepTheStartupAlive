@@ -3,6 +3,48 @@ import { ensureDatabase } from "./bootstrap-db";
 import { ensureWorkspaceRoleTemplates } from "./seed";
 import { getActiveTenant } from "./tenant";
 
+const teamMemberListSelect = {
+  id: true,
+  workspaceId: true,
+  name: true,
+  roleName: true,
+  isRealMember: true,
+  capabilities: true,
+  customMetrics: true,
+  personality: true,
+  communicationStyle: true,
+  decisionPreference: true,
+  createdAt: true,
+  updatedAt: true,
+  distillationProfile: {
+    select: {
+      id: true,
+      teamMemberId: true,
+      languageStyle: true,
+      decisionPreference: true,
+      values: true,
+      pressureResponse: true,
+      capabilityTendency: true,
+      typicalPhrases: true,
+      professionalBoundary: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  sourceDocuments: {
+    orderBy: { createdAt: "desc" as const },
+    take: 3,
+    select: {
+      id: true,
+      teamMemberId: true,
+      fileName: true,
+      mimeType: true,
+      sourceKind: true,
+      createdAt: true,
+    },
+  },
+};
+
 // Lightweight version for simulation preparation page
 export async function getActiveWorkspaceForSimulationPrep() {
   await ensureDatabase();
@@ -214,6 +256,156 @@ export async function getActiveWorkspaceForOverview() {
   };
 }
 
+export async function getActiveWorkspaceForRun() {
+  await ensureDatabase();
+  const db = getDb();
+  const tenant = await getActiveTenant();
+  return db.simulationWorkspace.findFirst({
+    where: { tenantId: tenant.id },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      currentCycle: true,
+      status: true,
+      selectedRoleNames: true,
+      userRole: true,
+      organizationProfile: {
+        select: {
+          name: true,
+        },
+      },
+      teamMembers: {
+        select: {
+          id: true,
+          name: true,
+          roleName: true,
+          isRealMember: true,
+        },
+        orderBy: { createdAt: "desc" },
+      },
+      meetings: {
+        orderBy: [{ cycle: "desc" }, { createdAt: "desc" }],
+        take: 1,
+        select: {
+          id: true,
+          cycle: true,
+          chair: true,
+          agenda: true,
+          participantViews: true,
+          userInput: true,
+          conclusion: true,
+          businessEvent: {
+            select: {
+              title: true,
+              description: true,
+              eventType: true,
+            },
+          },
+          decisionOptions: {
+            select: {
+              id: true,
+              title: true,
+              recommendation: true,
+              upside: true,
+              risk: true,
+              resourceNeed: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+export async function getActiveWorkspaceForCycle() {
+  await ensureDatabase();
+  const db = getDb();
+  const tenant = await getActiveTenant();
+  return db.simulationWorkspace.findFirst({
+    where: { tenantId: tenant.id },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      organizationStage: true,
+      sandboxType: true,
+      currentCycle: true,
+      organizationState: true,
+      selectedRoleNames: true,
+      userRole: true,
+      selectedScenarioId: true,
+      organizationProfile: {
+        select: {
+          id: true,
+          name: true,
+          stage: true,
+          industry: true,
+          product: true,
+          market: true,
+          cashflow: true,
+          revenue: true,
+          teamSize: true,
+          governanceStructure: true,
+          keyRisks: true,
+          documents: {
+            orderBy: { createdAt: "desc" },
+            take: 3,
+            select: {
+              fileName: true,
+              sourceKind: true,
+              extractedText: true,
+            },
+          },
+        },
+      },
+      teamMembers: {
+        select: {
+          id: true,
+          name: true,
+          roleName: true,
+          capabilities: true,
+          customMetrics: true,
+          personality: true,
+          communicationStyle: true,
+          decisionPreference: true,
+          distillationProfile: {
+            select: {
+              languageStyle: true,
+              decisionPreference: true,
+              values: true,
+              pressureResponse: true,
+              professionalBoundary: true,
+            },
+          },
+          sourceDocuments: {
+            where: { sourceKind: "skill" },
+            orderBy: { createdAt: "desc" },
+            take: 2,
+            select: {
+              fileName: true,
+              extractedText: true,
+              sourceKind: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      },
+      meetings: {
+        orderBy: [{ cycle: "desc" }, { createdAt: "desc" }],
+        take: 3,
+        select: {
+          cycle: true,
+          agenda: true,
+          conclusion: true,
+          userInput: true,
+          participantViews: true,
+        },
+      },
+    },
+  });
+}
+
 // Lightweight version for team page (only needs team members + profiles)
 export async function getActiveWorkspaceForTeam() {
   await ensureDatabase();
@@ -226,10 +418,7 @@ export async function getActiveWorkspaceForTeam() {
       id: true,
       name: true,
       teamMembers: {
-        include: {
-          distillationProfile: true,
-          sourceDocuments: { orderBy: { createdAt: "desc" }, take: 3 },
-        },
+        select: teamMemberListSelect,
         orderBy: { createdAt: "desc" },
       },
     },
@@ -245,10 +434,7 @@ export async function getActiveWorkspaceForTeam() {
       id: true,
       name: true,
       teamMembers: {
-        include: {
-          distillationProfile: true,
-          sourceDocuments: { orderBy: { createdAt: "desc" }, take: 3 },
-        },
+        select: teamMemberListSelect,
         orderBy: { createdAt: "desc" },
       },
     },

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppShell, EmptyState, PageHeader, Panel } from "@/components/app-shell";
 import { OrganizationDocumentForm } from "@/components/organization-document-form";
+import { OrganizationDocumentActions } from "@/components/organization-document-actions";
 import { OrganizationForm } from "@/components/organization-form";
 import { ArchiveList } from "@/components/archive-list";
 import { getActiveWorkspace } from "@/lib/workspace";
@@ -62,7 +63,10 @@ export default async function OrganizationPage() {
               {workspace.organizationProfile.documents.length ? (
                 workspace.organizationProfile.documents.map((document) => (
                   <div key={document.id} className="rounded-md border border-[var(--line)] bg-white/[0.03] p-3 text-sm">
-                    <div className="font-semibold text-white">{document.fileName}</div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="font-semibold text-white">{document.fileName}</div>
+                      <OrganizationDocumentActions documentId={document.id} />
+                    </div>
                     <div className="mt-1 text-xs text-[var(--muted)]">
                       {document.sourceKind} · {document.mimeType}
                     </div>

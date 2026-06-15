@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AuthForm } from "@/components/auth-forms";
+import { SsoLoginForm } from "@/components/sso-login-form";
 import { getCurrentAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export default async function LoginPage() {
           返回首页
         </Link>
         <AuthForm mode="login" />
+        <SsoLoginForm />
       </div>
     </main>
   );

@@ -19,6 +19,11 @@ export async function GET() {
       synced: false,
     },
     workspaces: 0,
+    queuedJobs: 0,
+    deadJobs: 0,
+    shareLinks: 0,
+    revokedShareLinks: 0,
+    auditLogs: 0,
   };
 
   try {
@@ -29,6 +34,11 @@ export async function GET() {
     checks.roleTemplates.actual = await getDb().roleTemplate.count();
     checks.roleTemplates.synced = checks.roleTemplates.actual >= checks.roleTemplates.expected;
     checks.workspaces = await getDb().simulationWorkspace.count();
+    checks.queuedJobs = await getDb().llmJob.count({ where: { status: "queued" } });
+    checks.deadJobs = await getDb().llmJob.count({ where: { status: "dead" } });
+    checks.shareLinks = await getDb().reportShareLink.count();
+    checks.revokedShareLinks = await getDb().reportShareLink.count({ where: { status: "revoked" } });
+    checks.auditLogs = await getDb().auditLog.count();
   } catch {
     checks.database = false;
   }

@@ -100,6 +100,9 @@ model EnterpriseTenant {
   llmJobs     LlmJob[]
   promptVersions PromptVersion[]
   reportShareLinks ReportShareLink[]
+  comments    CollaborationComment[]
+  ssoSettings  TenantSsoSetting[]
+  usageLimits  TenantUsageLimit?
 }
 
 model TenantMember {
@@ -130,6 +133,35 @@ model TenantInvitation {
   updatedAt   DateTime @updatedAt
 
   tenant      EnterpriseTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model TenantSsoSetting {
+  id           String   @id @default(cuid())
+  tenantId     String
+  provider     String
+  issuer       String
+  clientId     String
+  clientSecret String?
+  status       String   @default("disabled")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       EnterpriseTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+}
+
+model TenantUsageLimit {
+  id             String   @id @default(cuid())
+  tenantId       String   @unique
+  trialEndsAt    DateTime?
+  monthlyLlmCalls Int     @default(500)
+  monthlyExports  Int     @default(50)
+  monthlyWorkspaces Int   @default(20)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant         EnterpriseTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
 model AppUser {
@@ -249,6 +281,22 @@ model SimulationFinale {
 
   workspace      SimulationWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   shareLinks     ReportShareLink[]
+  comments       CollaborationComment[]
+}
+
+model CollaborationComment {
+  id        String   @id @default(cuid())
+  tenantId  String
+  finaleId  String
+  authorId  String?
+  author    String
+  body      String
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    EnterpriseTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  finale    SimulationFinale @relation(fields: [finaleId], references: [id], onDelete: Cascade)
 }
 
 model ReportShareLink {

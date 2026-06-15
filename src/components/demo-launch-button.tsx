@@ -3,16 +3,22 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
+import { demoTemplates } from "@/lib/demo-templates";
 
 export function DemoLaunchButton() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [templateId, setTemplateId] = useState(demoTemplates[0]?.id ?? "");
 
   async function launchDemo() {
     setPending(true);
     setError("");
-    const response = await fetch("/api/demo", { method: "POST" });
+    const response = await fetch("/api/demo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ templateId }),
+    });
     const body = await response.json().catch(() => ({}));
 
     if (!response.ok) {
@@ -26,7 +32,25 @@ export function DemoLaunchButton() {
   }
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex w-full max-w-xl flex-col items-center gap-3">
+      <div className="w-full rounded-lg border border-cyan-300/20 bg-black/20 p-3">
+        <label className="mb-2 block text-left text-xs font-semibold text-cyan-100/80">选择演示行业</label>
+        <select
+          value={templateId}
+          onChange={(event) => setTemplateId(event.target.value)}
+          disabled={pending}
+          className="w-full rounded-md border border-cyan-300/25 bg-[#07111f] px-3 py-2 text-sm text-white outline-none focus:border-cyan-200"
+        >
+          {demoTemplates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name}
+            </option>
+          ))}
+        </select>
+        <p className="mt-2 text-left text-xs leading-5 text-slate-400">
+          {demoTemplates.find((template) => template.id === templateId)?.description}
+        </p>
+      </div>
       <button
         type="button"
         onClick={launchDemo}

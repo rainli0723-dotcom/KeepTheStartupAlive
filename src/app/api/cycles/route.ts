@@ -5,7 +5,7 @@ import { getDb } from "@/lib/db";
 import { businessCycleSchema, callStructuredLlm } from "@/lib/llm";
 import { parseCapabilities, parseMetrics, parseState, toJson } from "@/lib/serializers";
 import { getLockedMemberIds, serializeLockedMemberIds } from "@/lib/simulation-run";
-import { getActiveWorkspace } from "@/lib/workspace";
+import { getActiveWorkspaceForCycle } from "@/lib/workspace";
 
 const cycleSchema = z.object({
   userInput: z.string().default(""),
@@ -14,7 +14,7 @@ const cycleSchema = z.object({
 
 export async function POST(request: Request) {
   const input = cycleSchema.parse(await request.json());
-  const workspace = await getActiveWorkspace();
+  const workspace = await getActiveWorkspaceForCycle();
   if (!workspace) return NextResponse.json({ error: "请先创建沙盘工作区" }, { status: 404 });
   if (workspace.currentCycle > 20) {
     return NextResponse.json({ error: "20 轮模拟已完成，请在仪表盘查看最终结局报告。" }, { status: 409 });
@@ -51,10 +51,10 @@ export async function POST(request: Request) {
     decisionPreference: member.decisionPreference,
     skillContext: member.sourceDocuments
       .filter((source) => source.sourceKind === "skill")
-      .slice(0, 3)
+      .slice(0, 2)
       .map((source) => ({
         title: source.fileName,
-        content: source.extractedText.slice(0, 1800),
+        content: source.extractedText.slice(0, 1200),
       })),
     distillationProfile: member.distillationProfile
       ? {
@@ -76,6 +76,9 @@ export async function POST(request: Request) {
   try {
     result = await callStructuredLlm({
       schema: businessCycleSchema,
+      task: "business_cycle.generate",
+      timeoutMs: 90000,
+      maxRetries: 1,
       messages: [
         {
           role: "user",
@@ -85,7 +88,7 @@ export async function POST(request: Request) {
             organizationContext: workspace.organizationProfile.documents.map((document) => ({
               title: document.fileName,
               kind: document.sourceKind,
-              content: document.extractedText.slice(0, 2200),
+              content: document.extractedText.slice(0, 1200),
             })),
             workspace: {
               stage: workspace.organizationStage,
@@ -96,6 +99,13 @@ export async function POST(request: Request) {
               userRole: workspace.userRole,
               chair,
             },
+            recentMemory: workspace.meetings.map((meeting) => ({
+              cycle: meeting.cycle,
+              agenda: meeting.agenda.slice(0, 240),
+              conclusion: meeting.conclusion.slice(0, 360),
+              userInput: meeting.userInput.slice(0, 360),
+              participantViews: meeting.participantViews.slice(0, 600),
+            })),
             ...(selectedScenario ? {
               scenarioContext: {
                 name: selectedScenario.name,
@@ -127,7 +137,7 @@ export async function POST(request: Request) {
               },
               meeting: {
                 agenda: "string",
-                participantViews: [{ roleName: "string", view: "string" }],
+                participantViews: [{ roleName: "string", view: "像真人会议发言的一段短句，不是报告摘要" }],
                 conclusion: "string",
                 options: [
                   {
@@ -154,6 +164,12 @@ export async function POST(request: Request) {
               "输出必须适合企业复盘报告",
               "生成 2-3 个决策方案",
               "每个角色观点必须体现角色能力、个性化设定、Skill 或蒸馏画像",
+              "participantViews 必须像真实会议逐个发言：每个 view 用第一人称或直接口吻，只说 1-3 句，不要写成分析报告",
+              "角色发言要短、具体、有取舍；允许出现追问、反对、犹豫、让步或对上一位角色的回应",
+              "必须参考 recentMemory 延续上一轮的关键结论、分歧或承诺，不要像每轮重新开始",
+              "如果某个角色上一轮坚持过某个立场，本轮可以延续、修正或让步，但要说得像真人会议发言",
+              "禁止在角色发言里使用“首先、其次、综上、建议如下、从某某角度来看”这类报告腔模板",
+              "不同角色必须有明显口吻差异：财务更谨慎，技术更关注实现边界，销售更关注客户阻力，法务更关注底线",
               "只有 roles 数组里的角色能参与本轮会议，不要引用未选中的角色",
               "本沙盘固定为 20 轮。若当前为第 20 轮，会议结论必须给出阶段性终局判断和后续 90 天建议",
               ...(selectedScenario ? [

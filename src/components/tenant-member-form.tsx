@@ -23,11 +23,11 @@ export function TenantMemberForm() {
         role: String(formData.get("role") ?? "viewer"),
       }),
     });
-    const result = await response.json();
+    const result = await response.json().catch(() => ({}));
     setLoading(false);
 
     if (!response.ok) {
-      setError(result.error ?? "邀请失败，请重试。");
+      setError(result.error ?? "邀请成员失败，请稍后再试");
       return;
     }
 
@@ -42,7 +42,7 @@ export function TenantMemberForm() {
   return (
     <form action={submit} className="grid gap-3 md:grid-cols-[1fr_1fr_140px_auto]">
       <input name="name" required placeholder="成员姓名" className="field" />
-      <input name="email" type="email" placeholder="邀请邮箱" className="field" />
+      <input name="email" type="email" placeholder="成员邮箱" className="field" />
       <select name="role" defaultValue="viewer" className="field">
         <option value="admin">管理员</option>
         <option value="editor">编辑者</option>

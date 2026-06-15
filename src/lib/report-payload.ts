@@ -2,9 +2,12 @@ import { getDb } from "./db";
 import { parseJson } from "./domain";
 import type { ReportPayload } from "./report-export";
 
-export async function getReportPayload(finaleId: string): Promise<ReportPayload | null> {
-  const finale = await getDb().simulationFinale.findUnique({
-    where: { id: finaleId },
+export async function getReportPayload(finaleId: string, options: { tenantId?: string | null } = {}): Promise<ReportPayload | null> {
+  const finale = await getDb().simulationFinale.findFirst({
+    where: {
+      id: finaleId,
+      ...(options.tenantId ? { workspace: { tenantId: options.tenantId } } : {}),
+    },
     include: {
       workspace: {
         include: {

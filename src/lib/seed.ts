@@ -3,9 +3,19 @@ import { defaultScenarios, roleTemplates } from "./domain";
 import { toJson } from "./serializers";
 import { ensureDatabase } from "./bootstrap-db";
 
+let roleTemplatesReady = false;
+let scenariosReady = false;
+
 export async function ensureRoleTemplates() {
   await ensureDatabase();
+  if (roleTemplatesReady) return;
   const db = getDb();
+
+  const count = await db.roleTemplate.count();
+  if (count >= roleTemplates.length) {
+    roleTemplatesReady = true;
+    return;
+  }
 
   for (const roleTemplate of roleTemplates) {
     await db.roleTemplate.upsert({
@@ -29,6 +39,7 @@ export async function ensureRoleTemplates() {
       },
     });
   }
+  roleTemplatesReady = true;
 }
 
 export async function ensureWorkspaceRoleTemplates(workspaceId: string) {
@@ -61,9 +72,13 @@ export async function ensureWorkspaceRoleTemplates(workspaceId: string) {
 
 export async function ensureScenarios() {
   await ensureDatabase();
+  if (scenariosReady) return;
   const db = getDb();
   const count = await db.scenario.count();
-  if (count >= defaultScenarios.length) return;
+  if (count >= defaultScenarios.length) {
+    scenariosReady = true;
+    return;
+  }
 
   for (const scenario of defaultScenarios) {
     const existing = await db.scenario.findFirst({ where: { name: scenario.name } });
@@ -87,4 +102,5 @@ export async function ensureScenarios() {
       },
     });
   }
+  scenariosReady = true;
 }

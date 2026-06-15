@@ -11,13 +11,23 @@ export function OrganizationDocumentForm() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPending(true);
     setMessage("");
 
     const form = event.currentTarget;
+    const formData = new FormData(form);
+    const file = formData.get("file");
+    const note = String(formData.get("note") ?? "").trim();
+    const hasFile = file instanceof File && file.size > 0;
+
+    if (!hasFile && !note) {
+      setMessage("请先选择公司情况文档，或在下方填写公司情况说明。");
+      return;
+    }
+
+    setPending(true);
     const response = await fetch("/api/organization/documents", {
       method: "POST",
-      body: new FormData(form),
+      body: formData,
     });
     const body = await response.json().catch(() => ({}));
 
@@ -28,7 +38,7 @@ export function OrganizationDocumentForm() {
       if (updatedFields?.length) {
         setMessage(`公司情况已导入并自动分析。已更新字段：${updatedFields.join("、")}。`);
       } else if (body.analysis?.summary) {
-        setMessage(`公司情况已导入。分析摘要：${body.analysis.summary}`);
+        setMessage(`公司情况已导入。${body.analysis.summary}`);
       } else {
         setMessage("公司情况文档已导入，并会参与后续会议推演。");
       }

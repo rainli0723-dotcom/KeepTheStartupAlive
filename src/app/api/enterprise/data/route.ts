@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canManageTenant, getCurrentAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { buildTenantDataDeletionScope } from "@/lib/enterprise-safety";
 import { writeAuditLog } from "@/lib/tenant";
 
 export async function DELETE() {
@@ -15,8 +16,7 @@ export async function DELETE() {
     where: { tenantId: auth.tenant.id },
     select: { id: true, organizationProfileId: true },
   });
-  const workspaceIds = workspaces.map((workspace) => workspace.id);
-  const organizationIds = Array.from(new Set(workspaces.map((workspace) => workspace.organizationProfileId)));
+  const { workspaceIds, organizationIds } = buildTenantDataDeletionScope(workspaces);
 
   await db.decisionOption.deleteMany({ where: { meeting: { workspaceId: { in: workspaceIds } } } });
   await db.strategyMeeting.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
