@@ -1,0 +1,72 @@
+{
+  "common": {
+    "appName": "KTSA 商业模拟沙盘",
+    "tagline": "AI 创业经营沙盘",
+    "startSimulation": "开始模拟",
+    "login": "登录",
+    "register": "注册",
+    "logout": "退出登录",
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "export": "导出",
+    "share": "分享",
+    "loading": "加载中...",
+    "error": "出错了",
+    "confirm": "确认"
+  },
+  "home": {
+    "hero": "Keep The Startup Alive",
+    "subtitle": "KTSA 是一个 AI 创业经营模拟沙盘，把企业背景转化为董事会式决策演练。",
+    "demoButton": "一键启动 Demo",
+    "pricing": "商业方案",
+    "enterprise": "企业空间",
+    "admin": "管理后台",
+    "security": "安全与数据处理",
+    "scenarios": "行业场景模板"
+  },
+  "simulation": {
+    "config": "模拟配置",
+    "configDesc": "进入会议前，确认参与身份、数字孪生角色和本轮组织情况。",
+    "currentMeeting": "当前会议",
+    "nextRoundRoles": "下一轮参会角色",
+    "decisionOptions": "本轮决策方案",
+    "locked": "已锁定",
+    "send": "发送",
+    "nextCycle": "下一轮",
+    "endSimulation": "主动结束",
+    "exportBrief": "导出纪要",
+    "quickAddRole": "新增角色到本轮",
+    "quickAddPlaceholder": "角色名称",
+    "quickAddConfirm": "新增并加入本轮",
+    "defaultRoles": "默认角色（预设）",
+    "digitalTwins": "数字孪生（已创建）",
+    "noTwins": "暂无数字孪生角色",
+    "noTwinsHint": "前往团队页面创建自定义角色"
+  },
+  "report": {
+    "title": "复盘报告",
+    "score": "综合评分",
+    "summary": "管理层摘要",
+    "keyDrivers": "关键驱动因素",
+    "decisionTrace": "决策轨迹",
+    "alternativeEndings": "替代结局",
+    "nextActions": "下一步行动",
+    "exportPDF": "导出 PDF",
+    "exportWord": "导出 Word",
+    "exportPPT": "导出 PPT",
+    "exportMarkdown": "导出 Markdown"
+  },
+  "enterprise": {
+    "title": "企业空间",
+    "overview": "企业概览",
+    "members": "成员与权限",
+    "analytics": "使用数据",
+    "security": "账号安全",
+    "audit": "审计记录",
+    "sso": "SSO 配置",
+    "usage": "用量限制",
+    "trialBanner": "试用期还有 {days} 天到期",
+    "trialExpired": "试用期已到期"
+  }
+}

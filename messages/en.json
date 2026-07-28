@@ -1,0 +1,72 @@
+{
+  "common": {
+    "appName": "KTSA Business Simulation",
+    "tagline": "AI Startup Sandbox",
+    "startSimulation": "Start Simulation",
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "export": "Export",
+    "share": "Share",
+    "loading": "Loading...",
+    "error": "Error",
+    "confirm": "Confirm"
+  },
+  "home": {
+    "hero": "Keep The Startup Alive",
+    "subtitle": "KTSA is an AI-powered business simulation sandbox that transforms company profiles into boardroom-style decision drills.",
+    "demoButton": "Launch Demo",
+    "pricing": "Pricing",
+    "enterprise": "Enterprise",
+    "admin": "Admin",
+    "security": "Security & Data",
+    "scenarios": "Industry Templates"
+  },
+  "simulation": {
+    "config": "Simulation Setup",
+    "configDesc": "Confirm your role, digital twin participants, and organization status before entering the meeting.",
+    "currentMeeting": "Current Meeting",
+    "nextRoundRoles": "Next Round Participants",
+    "decisionOptions": "Decision Options",
+    "locked": "Locked",
+    "send": "Send",
+    "nextCycle": "Next Round",
+    "endSimulation": "End Simulation",
+    "exportBrief": "Export Minutes",
+    "quickAddRole": "Add Role to Round",
+    "quickAddPlaceholder": "Role name",
+    "quickAddConfirm": "Add & Join Round",
+    "defaultRoles": "Default Roles (Presets)",
+    "digitalTwins": "Digital Twins (Created)",
+    "noTwins": "No digital twin roles yet",
+    "noTwinsHint": "Go to Team page to create custom roles"
+  },
+  "report": {
+    "title": "Review Report",
+    "score": "Overall Score",
+    "summary": "Management Summary",
+    "keyDrivers": "Key Drivers",
+    "decisionTrace": "Decision Trace",
+    "alternativeEndings": "Alternative Endings",
+    "nextActions": "Next Actions",
+    "exportPDF": "Export PDF",
+    "exportWord": "Export Word",
+    "exportPPT": "Export PPT",
+    "exportMarkdown": "Export Markdown"
+  },
+  "enterprise": {
+    "title": "Enterprise Space",
+    "overview": "Overview",
+    "members": "Members & Permissions",
+    "analytics": "Usage Analytics",
+    "security": "Account Security",
+    "audit": "Audit Log",
+    "sso": "SSO Settings",
+    "usage": "Usage Limits",
+    "trialBanner": "{days} days left in trial",
+    "trialExpired": "Trial expired"
+  }
+}

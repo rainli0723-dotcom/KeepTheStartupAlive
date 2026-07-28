@@ -1,0 +1,5 @@
+{
+  "buildCommand": "npm run prisma:generate:prod && next build",
+  "devCommand": "next dev",
+  "installCommand": "npm install"
+}

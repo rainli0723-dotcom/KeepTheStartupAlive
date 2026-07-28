@@ -1,0 +1,27 @@
+# LLM Background Worker
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+RUN addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 ktsa
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY --from=deps --chown=ktsa:nodejs /app/node_modules ./node_modules
+COPY --chown=ktsa:nodejs package.json ./
+COPY --chown=ktsa:nodejs prisma-postgres ./prisma-postgres
+COPY --chown=ktsa:nodejs scripts ./scripts
+COPY --chown=ktsa:nodejs src/lib/db.ts ./src/lib/db.ts
+
+USER ktsa
+
+HEALTHCHECK --interval=60s --timeout=5s --start-period=15s --retries=3 \
+  CMD pgrep -f "llm-worker" || exit 1
+
+CMD ["node", "scripts/llm-worker.mjs"]

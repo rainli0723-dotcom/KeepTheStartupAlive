@@ -1,0 +1,12 @@
+node_modules/
+.next/
+*.db
+*.db-journal
+.env
+.env.local
+.git
+.gitignore
+README.md
+*.zip
+ktsa-mvp.zip
+.DS_Store

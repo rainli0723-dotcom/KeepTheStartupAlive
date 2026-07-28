@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Download, Loader2, Send, StopCircle } from "lucide-react";
+import { ArrowRight, Check, Download, Loader2, Plus, Send, StopCircle, Zap } from "lucide-react";
 import type { MeetingInteractionLog } from "@/lib/simulation-run";
+import { JobProgressBar, useJobPolling } from "@/components/job-progress";
 
 type DecisionOptionView = {
   id: string;
@@ -77,6 +78,28 @@ export function SimulationRunClient({ run }: { run: RunState }) {
   const [finaleData, setFinaleData] = useState<{ title: string; summary: string; score: number } | null>(null);
   const [decisionLocked, setDecisionLocked] = useState(false);
   const [visibleIntro, setVisibleIntro] = useState({ meetingId: "", count: 0 });
+  const [cycleJobId, setCycleJobId] = useState<string | null>(null);
+  const [finaleJobId, setFinaleJobId] = useState<string | null>(null);
+
+  const cycleJobState = useJobPolling(cycleJobId, () => {
+    router.refresh();
+    setCycleJobId(null);
+    setLocalInteractions([]);
+    setSuggestedChoices([]);
+    setDecisionLocked(false);
+    setSelectedOptionId("");
+    setPending(null);
+  });
+
+  const finaleJobState = useJobPolling(finaleJobId, (result: unknown) => {
+    const data = result as { finale?: { title: string; summary: string; score: number } };
+    if (data?.finale) {
+      setFinaleData({ title: data.finale.title, summary: data.finale.summary, score: data.finale.score });
+      setShowFinaleModal(true);
+    }
+    setFinaleJobId(null);
+    setPending(null);
+  });
 
   const meeting = run.latestMeeting;
   const introItems = useMemo<MeetingIntroItem[]>(() => {
@@ -211,7 +234,7 @@ export function SimulationRunClient({ run }: { run: RunState }) {
     setPending("cycle");
     setError("");
     const recentInteraction = allInteractions.at(-1);
-    const response = await fetch("/api/cycles", {
+    const response = await fetch("/api/cycles?async=1", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -233,12 +256,18 @@ export function SimulationRunClient({ run }: { run: RunState }) {
       return;
     }
 
-    router.refresh();
-    setLocalInteractions([]);
-    setSuggestedChoices([]);
-    setDecisionLocked(false);
-    setSelectedOptionId("");
-    setPending(null);
+    // Async mode: start polling
+    if (body.jobId) {
+      setCycleJobId(body.jobId);
+    } else {
+      // Fallback: old sync response
+      router.refresh();
+      setLocalInteractions([]);
+      setSuggestedChoices([]);
+      setDecisionLocked(false);
+      setSelectedOptionId("");
+      setPending(null);
+    }
   }
 
   function exportMeetingBrief() {
@@ -312,26 +341,19 @@ export function SimulationRunClient({ run }: { run: RunState }) {
       body: JSON.stringify({ status: "ended" }),
     });
 
-    // Generate finale: returns fallback INSTANTLY, LLM enriches in background
+    // Generate finale via async API
     try {
-      const res = await fetch("/api/finale", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await fetch("/api/finale?async=1", { method: "POST" });
       const body = await res.json();
+      if (body.jobId) {
+        setFinaleJobId(body.jobId);
+        return;
+      }
+      // Fallback: sync response
       if (body.finale) {
-        setFinaleData({
-          title: body.finale.title,
-          summary: body.finale.summary,
-          score: body.finale.score,
-        });
+        setFinaleData({ title: body.finale.title, summary: body.finale.summary, score: body.finale.score });
         setShowFinaleModal(true);
         setPending(null);
-
-        // If not yet enriched by LLM, poll for the improved version
-        if (!body.enriched) {
-          pollForEnrichedFinale(5, 2500); // poll up to 5 times, every 2.5s
-        }
         return;
       }
     } catch {
@@ -355,26 +377,6 @@ export function SimulationRunClient({ run }: { run: RunState }) {
     }
 
     setPending(null);
-  }
-
-  async function pollForEnrichedFinale(remaining: number, delayMs: number) {
-    if (remaining <= 0) return;
-    await new Promise((r) => setTimeout(r, delayMs));
-    try {
-      const res = await fetch("/api/finale");
-      const body = await res.json();
-      if (body.enriched && body.finale) {
-        setFinaleData({
-          title: body.finale.title,
-          summary: body.finale.summary,
-          score: body.finale.score,
-        });
-      } else if (remaining > 1) {
-        pollForEnrichedFinale(remaining - 1, delayMs);
-      }
-    } catch {
-      if (remaining > 1) pollForEnrichedFinale(remaining - 1, delayMs);
-    }
   }
 
   const fetchAndShowFinale = useCallback(async () => {
@@ -579,6 +581,11 @@ export function SimulationRunClient({ run }: { run: RunState }) {
           </header>
 
           {error ? <div className="mx-5 mt-4 rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">{error}</div> : null}
+          {(cycleJobState || finaleJobState) && (
+            <div className="mx-5 mt-4">
+              <JobProgressBar state={cycleJobState || finaleJobState} />
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto px-5 py-5">
             {!meeting ? (
