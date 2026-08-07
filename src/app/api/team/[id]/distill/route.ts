@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canEdit, getScopedTeamMember } from "@/lib/access-control";
+import { canEdit, getScopedTeamMember, requireAuth } from "@/lib/access-control";
 import { getCurrentAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { extractTextFromUpload } from "@/lib/extract";
@@ -8,8 +8,10 @@ import { writeAuditLog } from "@/lib/tenant";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  const auth = await getCurrentAuth();
-  if (auth && !canEdit(auth.user.role)) {
+  const session = await requireAuth();
+  if ("error" in session) return session.error;
+  const auth = session.auth;
+  if (!canEdit(auth.user.role)) {
     return NextResponse.json({ error: "需要管理员或编辑者权限" }, { status: 403 });
   }
   const db = getDb();

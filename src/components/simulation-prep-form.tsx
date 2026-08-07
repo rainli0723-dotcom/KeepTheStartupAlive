@@ -39,12 +39,14 @@ export function SimulationPrepForm({
   scenarios = [],
   selectedScenario = null,
   currentRole,
+  currentCycle = 1,
 }: {
   organization: OrganizationPrep;
   teamMembers: TeamMemberPrep[];
   scenarios?: ScenarioPrep[];
   selectedScenario?: ScenarioPrep | null;
   currentRole: string;
+  currentCycle?: number;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -157,6 +159,17 @@ export function SimulationPrepForm({
       setError("请至少选择一个本局参会的数字孪生角色或默认角色。");
       setPending(false);
       return;
+    }
+
+    // Warn if restarting an active simulation
+    if (currentCycle > 1) {
+      const confirmed = window.confirm(
+        `当前模拟已进行到第 ${currentCycle - 1} 轮。\n\n重新开始将删除所有会议记录、事件和结局报告，此操作不可撤销。\n\n确定要重新开始吗？`
+      );
+      if (!confirmed) {
+        setPending(false);
+        return;
+      }
     }
 
     // Get selected scenario ID

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { toJson } from "@/lib/serializers";
+import { requireAuth } from "@/lib/access-control";
 
 const scenarioSchema = z.object({
   name: z.string().min(1),
@@ -27,6 +28,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const session = await requireAuth();
+  if ("error" in session) return session.error;
+
   const input = scenarioSchema.parse(await request.json());
   if (!input.nodes.some((node) => node.nodeType === "event")) {
     return NextResponse.json({ error: "场景至少需要一个事件节点" }, { status: 400 });
@@ -56,6 +60,9 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const session = await requireAuth();
+  if ("error" in session) return session.error;
+
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "缺少 id" }, { status: 400 });
@@ -64,6 +71,9 @@ export async function DELETE(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const session = await requireAuth();
+  if ("error" in session) return session.error;
+
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "缺少 id" }, { status: 400 });

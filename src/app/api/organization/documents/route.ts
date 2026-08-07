@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { canEdit } from "@/lib/access-control";
+import { canEdit, requireAuth } from "@/lib/access-control";
 import { getCurrentAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { extractTextFromUpload } from "@/lib/extract";
@@ -19,8 +19,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await getCurrentAuth();
-  if (auth && !canEdit(auth.user.role)) {
+  const session = await requireAuth();
+  if ("error" in session) return session.error;
+  const auth = session.auth;
+  if (!canEdit(auth.user.role)) {
     return NextResponse.json({ error: "需要管理员或编辑者权限" }, { status: 403 });
   }
   let formData: FormData;

@@ -415,17 +415,21 @@ export function SimulationRunClient({ run }: { run: RunState }) {
             </div>
             <div className="mt-8 flex justify-center gap-3">
               <button
-                onClick={() => router.push("/")}
+                onClick={() => router.push("/dashboard")}
                 className="rounded-md border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/20"
               >
-                返回主页
+                返回仪表盘
               </button>
               <button
                 onClick={() => {
                   fetch("/api/finale").then(async (res) => {
                     const body = await res.json();
-                    if (body.finale?.id) router.push(`/finale/${body.finale.id}`);
-                  });
+                    if (body.finale?.id) {
+                      router.push(`/finale/${body.finale.id}`);
+                    } else {
+                      router.push("/reports");
+                    }
+                  }).catch(() => router.push("/reports"));
                 }}
                 className="rounded-md bg-[#3370ff] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#4e83ff]"
               >

@@ -14,14 +14,17 @@ import { getCurrentAuth } from "@/lib/auth";
 import { parseJson } from "@/lib/domain";
 import { getDb } from "@/lib/db";
 import { isActiveShareLink } from "@/lib/enterprise-safety";
-import { getActiveTenant } from "@/lib/tenant";
 import { getTenantUsageSnapshot } from "@/lib/usage-limits";
 
 export const dynamic = "force-dynamic";
 
+import { redirect } from "next/navigation";
+
 export default async function EnterprisePage() {
   const auth = await getCurrentAuth();
-  const activeTenant = await getActiveTenant();
+  if (!auth) redirect("/login");
+
+  const activeTenant = auth.tenant;
   const tenant = await getDb().enterpriseTenant.findUnique({
     where: { id: activeTenant.id },
     include: {

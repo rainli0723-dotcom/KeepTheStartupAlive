@@ -6,6 +6,7 @@ import { businessCycleSchema, callStructuredLlm } from "@/lib/llm";
 import { parseCapabilities, parseMetrics, parseState, toJson } from "@/lib/serializers";
 import { getLockedMemberIds, serializeLockedMemberIds } from "@/lib/simulation-run";
 import { getActiveWorkspaceForCycle } from "@/lib/workspace";
+import { requireAuth } from "@/lib/access-control";
 
 const cycleSchema = z.object({
   userInput: z.string().default(""),
@@ -13,6 +14,9 @@ const cycleSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const session = await requireAuth();
+  if ("error" in session) return session.error;
+
   const input = cycleSchema.parse(await request.json());
   const workspace = await getActiveWorkspaceForCycle();
   if (!workspace) return NextResponse.json({ error: "请先创建沙盘工作区" }, { status: 404 });

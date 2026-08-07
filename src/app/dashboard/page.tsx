@@ -72,7 +72,7 @@ export default async function DashboardPage() {
               查看复盘报告
             </Link>
           ) : (
-            <Link href="/simulation/prepare" className="glass-primary-button w-full px-4 py-3 text-sm">
+            <Link href="/simulation/config" className="glass-primary-button w-full px-4 py-3 text-sm">
               进入模拟配置
             </Link>
           )}

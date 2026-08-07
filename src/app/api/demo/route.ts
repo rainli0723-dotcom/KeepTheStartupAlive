@@ -19,6 +19,22 @@ export async function POST(request: Request) {
   if (auth) {
     const quota = await assertTenantUsageAllowed(auth.tenant.id, "workspaces");
     if (!quota.ok) return NextResponse.json({ error: quota.reason }, { status: 402 });
+  } else {
+    // Anonymous demo: limit by cookie to prevent LLM cost abuse
+    const demoKey = request.headers.get("cookie")?.match(/demo_session=([^;]+)/)?.[1] ?? "unknown";
+    const recentDemoCount = await getDb().auditLog.count({
+      where: {
+        action: "workspace.demo_created",
+        actor: `demo_${demoKey.slice(0, 32)}`,
+        createdAt: { gte: new Date(Date.now() - 3600_000) },
+      },
+    });
+    if (recentDemoCount >= 3) {
+      return NextResponse.json(
+        { error: "演示次数已达上限（每小时3次）。请注册账号继续体验完整功能。" },
+        { status: 429 },
+      );
+    }
   }
 
   const template = getDemoTemplate(typeof body.templateId === "string" ? body.templateId : null);

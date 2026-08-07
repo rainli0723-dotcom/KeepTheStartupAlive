@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { canEdit } from "@/lib/access-control";
+import { canEdit, requireAuth } from "@/lib/access-control";
 import { getCurrentAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { defaultOrganizationState } from "@/lib/domain";
@@ -74,12 +74,14 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const auth = await getCurrentAuth();
-  if (auth && !canEdit(auth.user.role)) {
+  const session = await requireAuth();
+  if ("error" in session) return session.error;
+  const auth = session.auth;
+  if (!canEdit(auth.user.role)) {
     return NextResponse.json({ error: "当前账号没有编辑权限" }, { status: 403 });
   }
 
-  const tenant = auth?.tenant ?? await getActiveTenant();
+  const tenant = auth.tenant;
   let workspace = await getActiveWorkspace();
   if (!workspace) {
     await createStarterWorkspace(tenant.id);

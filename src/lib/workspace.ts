@@ -56,6 +56,7 @@ export async function getActiveWorkspaceForSimulationPrep() {
     select: {
       id: true,
       userRole: true,
+      currentCycle: true,
       selectedScenarioId: true,
       organizationProfile: {
         select: {
@@ -96,6 +97,7 @@ export async function getActiveWorkspaceForSimulationPrep() {
       select: {
         id: true,
         userRole: true,
+        currentCycle: true,
         selectedScenarioId: true,
         organizationProfile: {
           select: {

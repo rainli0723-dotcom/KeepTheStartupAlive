@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getActiveWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
+import { requireAuth } from "@/lib/access-control";
 
 const organizationSchema = z.object({
   name: z.string().min(1),
@@ -22,6 +23,9 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  const session = await requireAuth();
+  if ("error" in session) return session.error;
+
   const workspace = await getActiveWorkspace();
   if (!workspace) return NextResponse.json({ error: "请先创建沙盘工作区" }, { status: 404 });
 

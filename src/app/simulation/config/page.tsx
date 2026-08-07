@@ -35,6 +35,7 @@ export default async function SimulationConfigPage() {
         scenarios={workspace.scenarios || []}
         selectedScenario={workspace.selectedScenario}
         currentRole={workspace.userRole}
+        currentCycle={workspace.currentCycle}
       />
     </AppShell>
   );

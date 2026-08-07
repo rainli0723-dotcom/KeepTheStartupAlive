@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { canEdit } from "@/lib/access-control";
+import { canEdit, requireAuth } from "@/lib/access-control";
 import { getCurrentAuth } from "@/lib/auth";
 import { getScopedTeamMember } from "@/lib/access-control";
 import { getDb } from "@/lib/db";
@@ -28,8 +28,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  const auth = await getCurrentAuth();
-  if (auth && !canEdit(auth.user.role)) {
+  const session = await requireAuth();
+  if ("error" in session) return session.error;
+  const auth = session.auth;
+  if (!canEdit(auth.user.role)) {
     return NextResponse.json({ error: "需要管理员或编辑者权限" }, { status: 403 });
   }
   const { tenant, member: existing } = await getScopedTeamMember(id);
@@ -52,7 +54,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   });
   await writeAuditLog({
     tenantId: tenant.id,
-    actor: auth?.user.email ?? "demo",
+    actor: auth.user.email,
     action: "team_member.updated",
     entityType: "TeamMember",
     entityId: member.id,
@@ -63,8 +65,10 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  const auth = await getCurrentAuth();
-  if (auth && !canEdit(auth.user.role)) {
+  const session = await requireAuth();
+  if ("error" in session) return session.error;
+  const auth = session.auth;
+  if (!canEdit(auth.user.role)) {
     return NextResponse.json({ error: "需要管理员或编辑者权限" }, { status: 403 });
   }
   const { tenant, member } = await getScopedTeamMember(id);
@@ -73,7 +77,7 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   await getDb().teamMember.delete({ where: { id: member.id } });
   await writeAuditLog({
     tenantId: tenant.id,
-    actor: auth?.user.email ?? "demo",
+    actor: auth.user.email,
     action: "team_member.deleted",
     entityType: "TeamMember",
     entityId: member.id,

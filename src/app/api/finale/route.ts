@@ -7,7 +7,7 @@ import { getActiveWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 import type { FinaleReport } from "@/lib/finale";
 import { callStructuredLlm, finaleSchema } from "@/lib/llm";
-import { canEdit } from "@/lib/access-control";
+import { canEdit, requireAuth } from "@/lib/access-control";
 import { getCurrentAuth } from "@/lib/auth";
 import { getActiveTenant, writeAuditLog } from "@/lib/tenant";
 
@@ -34,6 +34,9 @@ type FinaleMeeting = Prisma.StrategyMeetingGetPayload<{
 type LlmFinaleReport = z.infer<typeof finaleSchema>;
 
 export async function GET() {
+  const session = await requireAuth();
+  if ("error" in session) return session.error;
+
   const workspace = await getActiveWorkspace();
   if (!workspace) return NextResponse.json({ finale: null });
 
@@ -49,6 +52,9 @@ export async function GET() {
 }
 
 export async function POST() {
+  const session = await requireAuth();
+  if ("error" in session) return session.error;
+
   const workspace = await getActiveWorkspace();
   if (!workspace) {
     return NextResponse.json({ error: "未找到可生成结局的沙盘工作区" }, { status: 404 });
@@ -236,11 +242,13 @@ async function archiveOrganization(
 
 export async function PATCH(request: Request) {
   try {
-    const auth = await getCurrentAuth();
-    if (auth && !canEdit(auth.user.role)) {
+    const session = await requireAuth();
+    if ("error" in session) return session.error;
+    const auth = session.auth;
+    if (!canEdit(auth.user.role)) {
       return NextResponse.json({ error: "需要管理员或编辑者权限" }, { status: 403 });
     }
-    const tenant = auth?.tenant ?? (await getActiveTenant());
+    const tenant = auth.tenant;
     const body = await request.json();
     const { id, title, summary, keyDrivers, decisionTrace, alternativeEndings, nextActions } = body;
     if (!id) return NextResponse.json({ error: "缺少 id" }, { status: 400 });
